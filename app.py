@@ -1,7 +1,7 @@
 import streamlit as st
 from duckduckgo_search import DDGS
 from urllib.parse import urlparse
-from docx import Document # Word作成用
+from docx import Document
 from io import BytesIO
 from datetime import datetime
 
@@ -41,7 +41,6 @@ if st.button("EXECUTE"):
         with st.spinner(f"Scoping target: '{target_input}'..."):
             official_site = get_final_official_site(target_input)
             
-            # 上場判定
             is_public = False
             if "ソニー" in target_input or "sony" in target_input.lower():
                 is_public = True
@@ -57,11 +56,11 @@ if st.button("EXECUTE"):
                                 is_public = True; break
                 except: pass
 
-            # ニュース
             news_results = []
             try:
                 with DDGS() as ddgs:
-                    news_results = list(ddgs.news(f'"{target_input}"', max_results=5))
+                    # ニュース検索を強化
+                    news_results = list(ddgs.news(f'"{target_input}"', max_results=10))
             except: pass
 
             st.divider()
@@ -69,11 +68,10 @@ if st.button("EXECUTE"):
             
             with col1:
                 st.markdown("### 🏢 Verified Profile")
+                domain = urlparse(official_site).netloc if official_site else "N/A"
                 if official_site:
-                    domain = urlparse(official_site).netloc
                     st.success(f"**Domain:**\n{domain}")
                 else:
-                    domain = "N/A"
                     st.error("Site Not Found")
 
                 st.markdown("---")
@@ -81,26 +79,32 @@ if st.button("EXECUTE"):
                 status_text = "Publicly Traded" if is_public else "Private / Unlisted"
                 st.info(f"**{status_text}**")
 
-                # --- 【Word出力機能】 ---
+                # --- 【Word出力機能：強化版】 ---
                 st.markdown("---")
-                
-                # Wordファイルの作成
                 doc = Document()
                 doc.add_heading('Strategic Intelligence Report', 0)
                 doc.add_paragraph(f"Report Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
                 
                 doc.add_heading('Entity Profile', level=1)
-                doc.add_paragraph(f"Target Name: {target_input}")
-                doc.add_paragraph(f"Official URL: {official_site}")
-                doc.add_paragraph(f"Market Status: {status_text}")
+                doc.add_paragraph(f"Target Name: {target_input}", style='List Bullet')
+                doc.add_paragraph(f"Official URL: {official_site}", style='List Bullet')
+                doc.add_paragraph(f"Market Status: {status_text}", style='List Bullet')
                 
-                doc.add_heading('Latest News Feed', level=1)
-                for n in news_results:
-                    doc.add_heading(n['title'], level=2)
-                    doc.add_paragraph(f"Source: {n['source']} | Date: {n['date']}")
-                    doc.add_paragraph(n['body'])
-                
-                # メモリ上にWordを保存
+                doc.add_heading('Latest News Intelligence', level=1)
+                if not news_results:
+                    doc.add_paragraph("No recent news found.")
+                else:
+                    for n in news_results:
+                        # ニュースごとに区切りを明確に
+                        doc.add_heading(n['title'], level=2)
+                        p = doc.add_paragraph()
+                        p.add_run(f"Source: {n['source']} | Date: {n['date']}").bold = True
+                        
+                        # 内容が切れないように全文を追加し、最後にURLを添える
+                        doc.add_paragraph(n['body'])
+                        doc.add_paragraph(f"Read more: {n['url']}")
+                        doc.add_paragraph("-" * 30) # 区切り線
+
                 bio = BytesIO()
                 doc.save(bio)
                 
