@@ -33,15 +33,23 @@ if st.button("EXECUTE"):
                                 break
                 except: pass
 
-            # 2. ニュース検索
+          # 2. ニュース検索（入力言語に合わせてキーワードを切り替え）
             news_results = []
             try:
                 with DDGS() as ddgs:
-                    # 業界キーワードを混ぜて検索
-                    search_query = f'"{target_input}" 再生医療 細胞治療 news'
+                    # 入力がアルファベット主体か判定
+                    is_english = target_input.isascii()
+                    
+                    if is_english:
+                        # 英語圏の再生医療キーワードで検索
+                        search_query = f'"{target_input}" "cell therapy" "regenerative medicine" news'
+                    else:
+                        # 日本語の再生医療キーワードで検索
+                        search_query = f'"{target_input}" 再生医療 細胞治療 news'
+                        
                     news_results = list(ddgs.news(search_query, max_results=10))
                     
-                    # ニュースが少ない場合のバックアップ
+                    # ニュースが少ない場合のバックアップ（キーワードを外して社名のみ）
                     if len(news_results) < 3:
                         news_results += list(ddgs.news(f'"{target_input}"', max_results=5))
             except: pass
@@ -95,3 +103,4 @@ if st.button("EXECUTE"):
                 file_name=f"{target_input}_Report.docx",
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             )
+
