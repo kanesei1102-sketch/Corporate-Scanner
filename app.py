@@ -92,11 +92,10 @@ if st.button("EXECUTE ANALYSIS"):
                 prompt_text = f"再生医療専門家として、{target_input}の動向を3点要約してください。\n\n{context}"
                 
                 try:
-                    # 前後の空白を完全に取り除いたキー
+                    # キーの前後にある目に見えないスペースを完全に排除
                     current_key = st.secrets["GEMINI_API_KEY"].strip()
                     
-                    # 【重要】URLをこの形に固定します。余計なmodels/などのパスを一切省きます。
-                    # v1beta を使い、モデル名は gemini-1.5-flash のみ。
+                    # 【重要】モデル名を gemini-1.5-flash に固定。v1beta を使用。
                     api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={current_key}"
                     
                     payload = {
@@ -106,15 +105,18 @@ if st.button("EXECUTE ANALYSIS"):
                     }
                     headers = {"Content-Type": "application/json"}
                     
-                    # 通信実行
+                    # バックアップ（gemini-proなど）は一切呼ばず、これ一本で勝負します
                     response = requests.post(api_url, json=payload, headers=headers, timeout=15)
                     
-                    # エラーがあればここで即座に詳細を出します
-                    if response.status_code != 200:
-                        ai_response = f"AIエラー詳細: {response.text}"
-                    else:
+                    if response.status_code == 200:
                         res_json = response.json()
                         ai_response = res_json["candidates"][0]["content"]["parts"][0]["text"]
+                    else:
+                        # 404や400が出た場合、その生の理由を表示（デバッグ用）
+                        ai_response = f"AIエラー（ステータス {response.status_code}）: {response.text}"
+                        
+                except Exception as ai_err:
+                    ai_response = f"通信エラー: {str(ai_err)}"
                         
                 except Exception as ai_err:
                     ai_response = f"通信エラー: {str(ai_err)}"
@@ -143,6 +145,7 @@ if "history_data" in st.session_state:
         with cols[idx % 2].expander(n['title']):
             st.write(n['body'])
             st.markdown(f"[全文]({n['url']})")
+
 
 
 
