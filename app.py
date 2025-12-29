@@ -5,8 +5,10 @@ from io import BytesIO
 from datetime import datetime
 
 # --- 【最重要】取得した鍵をここに貼り付け ---
-GOOGLE_API_KEY = "ここにAPIキーを貼る"
-GOOGLE_CX = "ここに検索エンジンIDを貼る"
+GOOGLE_API_KEY = "AIzaSyAk2sfv67SGkZ4gAiKPLdSPgSWIAYYO0zo"
+GOOGLE_CX = "<script async src="https://cse.google.com/cse.js?cx=43b6a568b52e34409">
+</script>
+<div class="gcse-search"></div>"
 
 st.set_page_config(page_title="Corporation-Scope Pro", layout="wide")
 
@@ -84,6 +86,7 @@ if st.button("EXECUTE"):
             bio = BytesIO()
             doc.save(bio)
             st.download_button(label="💾 Download Summary Report", data=bio.getvalue(), file_name=f"{target_input}_Report.docx")
+
 
 
 
