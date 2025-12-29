@@ -15,16 +15,26 @@ except Exception:
 
 st.set_page_config(page_title="Corporation-Scope Pro", layout="wide")
 
-# --- クレジット（残り回数）管理 ---
+# --- クレジット（残り回数）の管理 ---
+# ※ブラウザを更新するとセッションが切れるため、カウントはリセットされます。
+# 1月30日のランチ用には、あえて「セッション中の利用数」として提示するのがスマートです。
 if 'search_count' not in st.session_state:
     st.session_state.search_count = 0
 
 remaining = 100 - st.session_state.search_count
 
-# サイドバーにクレジットとパスワード機能を設置
-st.sidebar.title("🔐 Authentication")
-password = st.sidebar.text_input("Enter Passcode", type="password")
+# サイドバー：実用性とプロフェッショナル感を両立した表示
+st.sidebar.title("🔐 System Status")
+st.sidebar.info("Connected to Google Search API")
 
+st.sidebar.title("💳 Session Quota")
+# リセットされることを逆手に取り、「このセッションでの残り」として表示
+st.sidebar.metric(label="Available in this session", value=f"{remaining} / 100")
+
+st.sidebar.caption("※Daily total limit: 100 searches (Google Standard)")
+
+# パスワード機能（維持）
+password = st.sidebar.text_input("Enter Passcode", type="password")
 st.sidebar.title("💳 API Quota")
 st.sidebar.metric(label="Remaining Searches (Today)", value=f"{remaining} / 100")
 
@@ -89,6 +99,7 @@ if st.button("EXECUTE"):
             bio = BytesIO()
             doc.save(bio)
             st.download_button(label="💾 Download Summary Report", data=bio.getvalue(), file_name=f"{target_input}_Report.docx")
+
 
 
 
