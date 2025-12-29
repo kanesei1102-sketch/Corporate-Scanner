@@ -20,32 +20,39 @@ MASTER_RECORDS = {
 }
 
 def get_final_official_site(query):
-    # 特定のマスターリストは最小限（ソニーなど超有名所のみ）にするか、空にする
     try:
         with DDGS() as ddgs:
-            # 検索ワードに「株式会社 公式」を加えて精度を最大化
-            search_query = f"{query} 株式会社 公式"
+            # 検索ワードはシンプルに「名称 公式サイト」にする（海外企業も拾えるように）
+            search_query = f"{query} official site corporate"
             results = list(ddgs.text(search_query, max_results=15))
             
-            # 除外したいドメインを強化
+            # 除外したい「情報のゴミ」
             noise_list = [
                 "wikipedia.org", "facebook.com", "youtube.com", "twitter.com", 
-                "mapion.co.jp", "tabelog.com", "navitime.co.jp", "求人", "indeed"
+                "mapion.co.jp", "tabelog.com", "indeed", "mynavi", ".cn", ".ru"
             ]
             
+            candidates = []
             for r in results:
                 url = r['href'].lower()
                 title = r['title']
                 
-                # 1. 広告やSNS、地図サイトを除外
                 if any(noise in url for noise in noise_list):
                     continue
                 
-                # 2. タイトルに「公式」や「ホーム」や「株式会社」が含まれているものを優先
-                if any(k in title for k in ["公式", "ホーム", "株式会社", "Corporate"]):
-                    return r['href']
+                # スコアリング（点数制）で判定
+                score = 0
+                if ".co.jp" in url or ".jp" in url: score += 2 # 日本企業なら加点
+                if "official" in url or "corporate" in url: score += 2 # 公式感があれば加点
+                if "株式会社" in title or "Corp" in title or "Inc" in title: score += 2
+                
+                candidates.append({"url": r['href'], "score": score})
+
+            # スコアが高い順に並び替えて、一番良いものを返す
+            if candidates:
+                best_match = sorted(candidates, key=lambda x: x['score'], reverse=True)[0]
+                return best_match['url']
             
-            # 見つからなかった場合の保険として、一番上の結果を返す
             if results:
                 return results[0]['href']
     except: pass
@@ -141,4 +148,5 @@ if st.button("EXECUTE"):
                         with st.expander(f"{item['title']}", expanded=True):
                             st.write(item['body'])
                             st.markdown(f"[Source Article]({item['url']})")
+
 
