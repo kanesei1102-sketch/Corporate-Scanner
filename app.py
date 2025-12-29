@@ -53,7 +53,8 @@ st.caption("Firestore & Google Search API 連動：更新しても利用状況�
 
 target_input = st.text_input("Target Entity", placeholder="Enter name (e.g. セルリソーシズ, ENCell)...")
 
-if st.button("EXECUTE"):
+
+  if st.button("EXECUTE"):
     if password != "crc2025":
         st.error("パスワードが正しくありません。")
     elif not target_input:
@@ -61,14 +62,16 @@ if st.button("EXECUTE"):
     elif remaining <= 0:
         st.error("本日の無料検索枠（100回）を使い切りました。")
     else:
-        # 1. まずデータベースを更新
+        # --- ここが重要！ ---
+        # 1. 検索前にFirestoreの数字を+1する
         doc_ref.update({"count": firestore.Increment(1)})
         
-        # 2. 検索実行（ここから下はそのまま）
+        # 2. 画面上の変数(remaining)もその場で1引く
+        remaining -= 1
+        
+        # 3. 検索を実行する
         with st.spinner(f"Querying Intelligence for '{target_input}'..."):
-            # ...（以下、検索ロジック）...
-            
-            # 🔍 検索実行
+            # (以下、これまでの検索ロジックと同じ)
             news_results = []
             try:
                 query = f'{target_input} 再生医療 ニュース 2025' if not target_input.isascii() else f'{target_input} "cell therapy" news'
@@ -84,12 +87,8 @@ if st.button("EXECUTE"):
                             'body': item.get('snippet'),
                             'url': item.get('link')
                         })
-                    
-                    # ✅ 検索成功時のみFirestoreのカウントを+1（更新しても戻らない！）
-                    doc_ref.update({"count": firestore.Increment(1)})
-                    # 画面表示用の数字も即座に更新
-                    remaining -= 1
-                    
+            except Exception as e:
+                st.error(f"API Error: {e}")                  
             except Exception as e:
                 st.error(f"API Error: {e}")
 
@@ -117,6 +116,7 @@ if st.button("EXECUTE"):
             bio = BytesIO()
             doc.save(bio)
             st.download_button(label="💾 Download Summary Report", data=bio.getvalue(), file_name=f"{target_input}_Report.docx")
+
 
 
 
