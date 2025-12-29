@@ -92,39 +92,32 @@ if st.button("EXECUTE ANALYSIS"):
                 prompt_text = f"再生医療専門家として、{target_input}の動向を3点要約してください。\n\n{context}"
                 
                 try:
-                    # 新しいキーに最適な v1 窓口
-                    api_url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+                    # 前後の空白を完全に取り除いたキー
+                    current_key = st.secrets["GEMINI_API_KEY"].strip()
                     
-                    # 【重要】400エラーを防ぐための、Googleが求める厳格なデータ構造です
+                    # 【重要】URLをこの形に固定します。余計なmodels/などのパスを一切省きます。
+                    # v1beta を使い、モデル名は gemini-1.5-flash のみ。
+                    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={current_key}"
+                    
                     payload = {
                         "contents": [{
                             "parts": [{"text": prompt_text}]
                         }]
                     }
-                    
-                    # ヘッダーに Content-Type を明示します
                     headers = {"Content-Type": "application/json"}
                     
+                    # 通信実行
                     response = requests.post(api_url, json=payload, headers=headers, timeout=15)
                     
-                    # もし 404 や 400 が出た場合のバックアップ（モデル名を Pro に切り替え）
+                    # エラーがあればここで即座に詳細を出します
                     if response.status_code != 200:
-                        api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
-                        response = requests.post(api_url, json=payload, headers=headers, timeout=15)
-
-                    response.raise_for_status() 
-                    res_json = response.json()
-                    
-                    # 応答の解析（ここも400エラー後の構造に対応させます）
-                    if "candidates" in res_json and len(res_json["candidates"]) > 0:
-                        ai_response = res_json["candidates"][0]["content"]["parts"][0]["text"]
+                        ai_response = f"AIエラー詳細: {response.text}"
                     else:
-                        ai_response = "AI分析は完了しましたが、結果が空でした。"
+                        res_json = response.json()
+                        ai_response = res_json["candidates"][0]["content"]["parts"][0]["text"]
                         
                 except Exception as ai_err:
-                    # 400エラーの時は、具体的な理由を表示するようにします
-                    error_detail = response.text if 'response' in locals() else str(ai_err)
-                    ai_response = f"AIエラー詳細: {error_detail}"
+                    ai_response = f"通信エラー: {str(ai_err)}"
 
                 # --- 履歴保存とセッション更新 ---
                 history_data = {
@@ -150,6 +143,7 @@ if "history_data" in st.session_state:
         with cols[idx % 2].expander(n['title']):
             st.write(n['body'])
             st.markdown(f"[全文]({n['url']})")
+
 
 
 
