@@ -93,10 +93,12 @@ if st.button("EXECUTE ANALYSIS"):
                 context = "\n".join([f"Title: {n['title']}\nSnippet: {n['body']}" for n in news_results[:5]])
                 prompt_text = f"再生医療専門家として、{target_input}の動向を3点要約してください。\n\n{context}"
                 
-                # --- AIライブラリを使わず、直接Google API(v1)を叩く方式に変更 ---
+                # --- AIライブラリを使わず、直接Google API(v1)を叩く方式 ---
                 try:
-                    # v1betaではなく「v1」を明示的に指定したURL
-                    api_url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+                    # 【ここを修正】 URLの .../v1/models/... を .../v1/... に変えます
+                    # models/gemini-1.5-flash ではなく gemini-1.5-flash とだけ伝えます
+                    api_url = f"https://generativelanguage.googleapis.com/v1/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+                    
                     payload = {
                         "contents": [{
                             "parts": [{"text": prompt_text}]
@@ -137,6 +139,7 @@ if "history_data" in st.session_state:
         with cols[idx % 2].expander(n['title']):
             st.write(n['body'])
             st.markdown(f"[全文]({n['url']})")
+
 
 
 
