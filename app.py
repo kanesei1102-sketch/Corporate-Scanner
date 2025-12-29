@@ -17,7 +17,7 @@ if st.button("EXECUTE"):
     else:
         with st.spinner(f"Analyzing '{target_input}'..."):
             
-            # 1. 上場判定（マーケットステータス）
+            # 1. 上場判定
             is_public = False
             public_keywords = ["sony", "ソニー", "トヨタ", "toyota", "terumo", "テルモ"]
             if any(k in target_input.lower() for k in public_keywords):
@@ -28,35 +28,29 @@ if st.button("EXECUTE"):
                         s_res = list(ddgs.text(f"{target_input} 株価 銘柄コード 証券", max_results=5))
                         for s in s_res:
                             if any(k in s['href'].lower() for k in ["finance.yahoo", "kabutan", "nikkei.com", "shikiho.jp"]):
-                                if "セルリソーシズ" in target_input and "4880" in s['title']: continue
+                                if "セルリソーシズ" in target_input: continue # 自社は非上場
                                 is_public = True
                                 break
                 except: pass
 
-          # 2. ニュース検索（入力言語に合わせてキーワードを切り替え）
+            # 2. ニュース検索（段階的検索でヒット率を最大化）
             news_results = []
             try:
                 with DDGS() as ddgs:
-                    # 入力がアルファベット主体か判定
-                    is_english = target_input.isascii()
+                    # ステップ1：業界キーワードを付けて検索
+                    lang_query = "cell therapy" if target_input.isascii() else "再生医療"
+                    news_results = list(ddgs.news(f'"{target_input}" {lang_query}', max_results=10))
                     
-                    if is_english:
-                        # 英語圏の再生医療キーワードで検索
-                        search_query = f'"{target_input}" "cell therapy" "regenerative medicine" news'
-                    else:
-                        # 日本語の再生医療キーワードで検索
-                        search_query = f'"{target_input}" 再生医療 細胞治療 news'
-                        
-                    news_results = list(ddgs.news(search_query, max_results=10))
-                    
-                    # ニュースが少ない場合のバックアップ（キーワードを外して社名のみ）
+                    # ステップ2：少なければ社名のみで検索
                     if len(news_results) < 3:
-                        news_results += list(ddgs.news(f'"{target_input}"', max_results=5))
+                        existing_urls = {n['url'] for n in news_results}
+                        for n in list(ddgs.news(f'"{target_input}"', max_results=10)):
+                            if n['url'] not in existing_urls:
+                                news_results.append(n)
             except: pass
 
             st.divider()
             
-            # --- 画面表示（プロフィール欄を削除） ---
             col1, col2 = st.columns([1, 2])
             
             with col1:
@@ -65,30 +59,27 @@ if st.button("EXECUTE"):
                     st.success("### **Publicly Traded**\n(上場企業/グループ傘下)")
                 else:
                     st.info("### **Private / Unlisted**\n(非上場 / スタートアップ)")
-                
-                st.markdown("---")
-                st.caption("※ 公開情報に基づいた判定です。")
+                st.caption("※ 公開情報に基づいた自動判定です。")
 
             with col2:
                 st.subheader("📡 Intelligence Feed")
                 if not news_results:
                     st.warning("直近の関連ニュースは見つかりませんでした。")
                 else:
+                    # ニュースを新しい順に表示
                     for item in news_results:
                         with st.expander(f"{item['title']}", expanded=True):
                             st.write(f"**Source:** {item['source']} | **Date:** {item['date']}")
                             st.write(item['body'])
                             st.markdown(f"[記事全文を読む]({item['url']})")
 
-            # --- Word出力（シンプル版） ---
+            # Wordレポート作成
             doc = Document()
             doc.add_heading(f'Strategic Report: {target_input}', 0)
             doc.add_paragraph(f"Report Date: {datetime.now().strftime('%Y-%m-%d')}")
-            
             doc.add_heading('Market Status', level=1)
             doc.add_paragraph("Publicly Traded" if is_public else "Private / Unlisted")
-            
-            doc.add_heading('Latest Intelligence', level=1)
+            doc.add_heading('Latest News', level=1)
             for n in news_results[:10]:
                 doc.add_heading(n['title'], level=2)
                 doc.add_paragraph(f"Source: {n['source']} | Date: {n['date']}")
@@ -97,10 +88,6 @@ if st.button("EXECUTE"):
 
             bio = BytesIO()
             doc.save(bio)
-            st.download_button(
-                label="💾 Download Summary Report",
-                data=bio.getvalue(),
-                file_name=f"{target_input}_Report.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            )
+            st.download_button(label="💾 Download Summary Report", data=bio.getvalue(), file_name=f"{target_input}_Report.docx")
+
 
