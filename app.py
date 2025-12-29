@@ -33,21 +33,40 @@ if st.button("EXECUTE"):
                                 break
                 except: pass
 
-            # 2. ニュース検索（段階的検索でヒット率を最大化）
+           # 2. ニュース検索（「出ない」を回避する4段階スキャン）
             news_results = []
             try:
                 with DDGS() as ddgs:
-                    # ステップ1：業界キーワードを付けて検索
-                    lang_query = "cell therapy" if target_input.isascii() else "再生医療"
-                    news_results = list(ddgs.news(f'"{target_input}" {lang_query}', max_results=10))
+                    # ステップ1：最新の業界ニュース（高精度）
+                    q1 = f'"{target_input}" 再生医療' if not target_input.isascii() else f'"{target_input}" "cell therapy"'
+                    news_results = list(ddgs.news(q1, max_results=10))
                     
-                    # ステップ2：少なければ社名のみで検索
+                    # ステップ2：少なければ「社名のみ」で検索
                     if len(news_results) < 3:
+                        q2 = f'"{target_input}"'
+                        more_news = list(ddgs.news(q2, max_results=10))
                         existing_urls = {n['url'] for n in news_results}
-                        for n in list(ddgs.news(f'"{target_input}"', max_results=10)):
+                        for n in more_news:
                             if n['url'] not in existing_urls:
                                 news_results.append(n)
-            except: pass
+                    
+                    # ステップ3：ニュース枠に無ければ通常のWeb検索（PR TIMES等を拾う）
+                    if len(news_results) < 2:
+                        web_news = list(ddgs.text(f"{target_input} ニュース news", max_results=5))
+                        for w in web_news:
+                            news_results.append({
+                                'title': w['title'],
+                                'source': 'Web info',
+                                'date': 'Recent',
+                                'body': w['body'],
+                                'url': w['href']
+                            })
+                    
+                    # ステップ4：それでもゼロなら「関連キーワード」で検索（最終手段）
+                    if not news_results and not target_input.isascii():
+                        news_results = list(ddgs.news("再生医療 細胞治療 最新", max_results=5))
+            except Exception:
+                pass
 
             st.divider()
             
@@ -89,5 +108,6 @@ if st.button("EXECUTE"):
             bio = BytesIO()
             doc.save(bio)
             st.download_button(label="💾 Download Summary Report", data=bio.getvalue(), file_name=f"{target_input}_Report.docx")
+
 
 
