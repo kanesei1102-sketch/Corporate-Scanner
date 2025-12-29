@@ -6,112 +6,138 @@ from datetime import datetime
 from google.cloud import firestore
 from google.oauth2 import service_account
 import json
+import google.generativeai as genai
 
-# --- 1. セキュリティ設定（Secretsから読み込み） ---
+# --- 1. 初期設定 & セキュリティ ---
 try:
+    # APIキー等の読み込み
     GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
     GOOGLE_CX = st.secrets["GOOGLE_CX"]
+    GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
     
-    # Firestoreの認証情報を読み込み
+    # Firestore設定
     key_dict = json.loads(st.secrets["FIRESTORE_KEY"])
     creds = service_account.Credentials.from_service_account_info(key_dict)
     db = firestore.Client(credentials=creds, project=key_dict["project_id"])
+    
+    # Gemini AI設定
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel('gemini-pro')
 except Exception as e:
     st.error(f"システム設定エラー: Secretsを確認してください。 ({e})")
     st.stop()
 
-# --- 2. データベース（Firestore）から今日の使用回数を取得 ---
+# --- 2. データベース（クォータ & 履歴）の取得 ---
 today_str = datetime.now().strftime('%Y-%m-%d')
-doc_ref = db.collection("daily_usage").document(today_str)
+usage_ref = db.collection("daily_usage").document(today_str)
+history_ref = db.collection("search_history")
 
+# クォータ取得
 try:
-    doc = doc_ref.get()
-    if not doc.exists:
-        doc_ref.set({"count": 0})
-        current_usage = 0
-    else:
-        current_usage = doc.to_dict().get("count", 0)
-except Exception:
+    usage_doc = usage_ref.get()
+    current_usage = usage_doc.to_dict().get("count", 0) if usage_doc.exists else 0
+except:
     current_usage = 0
-
 remaining = 100 - current_usage
 
+# 履歴取得（最新5件）
+try:
+    history_docs = history_ref.order_by("timestamp", direction=firestore.Query.DESCENDING).limit(5).stream()
+    recent_history = [d.to_dict() for d in history_docs]
+except:
+    recent_history = []
+
 # --- 3. 画面レイアウト ---
-st.set_page_config(page_title="Corporation-Scope Pro", layout="wide")
+st.set_page_config(page_title="Intel-Scope Personal", layout="wide")
 
-# サイドバー表示
-st.sidebar.title("🔐 Authentication")
-password = st.sidebar.text_input("Enter Passcode", type="password")
-
-st.sidebar.title("💳 Global Quota")
-# プレースホルダーを作って、ボタン押下時に即書き換えられるようにする
+# サイドバー
+st.sidebar.title("🔐 Auth & Quota")
+password = st.sidebar.text_input("Passcode", type="password")
 quota_placeholder = st.sidebar.empty()
-quota_placeholder.metric(label="Today's Remaining", value=f"{remaining} / 100")
-st.sidebar.caption("※この数字は全ユーザーで共有・同期されています。")
+quota_placeholder.metric("Search Remaining", f"{remaining} / 100")
 
-st.title("Corporation-Scope: Strategic Intelligence")
-st.caption("Firestore & Google Search API 連動：更新しても利用状況を完全維持するプロ仕様。")
+st.sidebar.divider()
+st.sidebar.title("📜 Recent History")
+for h in recent_history:
+    if st.sidebar.button(f"🕒 {h['target']}", key=h['timestamp']):
+        st.session_state.history_data = h
 
-target_input = st.text_input("Target Entity", placeholder="Enter name (e.g. セルリソーシズ, ENCell)...")
+# メイン画面
+st.title("Intel-Scope: Personal AI Consultant")
+st.caption("Google Search × Firestore × Gemini AI：あなたの思考を拡張する専用機。")
 
-# --- 4. 実行処理 ---
-if st.button("EXECUTE"):
+target_input = st.text_input("Target Entity", placeholder="企業名を入力...")
+
+# --- 4. メインロジック ---
+if st.button("EXECUTE ANALYSIS"):
     if password != "crc2025":
         st.error("パスワードが正しくありません。")
     elif not target_input:
         st.warning("社名を入力してください。")
     elif remaining <= 0:
-        st.error("本日の無料検索枠（100回）を使い切りました。")
+        st.error("本日の検索枠を使い切りました。")
     else:
-        # データベースを更新
-        doc_ref.update({"count": firestore.Increment(1)})
-        # 画面上の表示を即座にデクリメントして書き換え（これで「同時」に見える）
+        # クォータ更新
+        usage_ref.set({"count": current_usage + 1}, merge=True)
         remaining -= 1
-        quota_placeholder.metric(label="Today's Remaining", value=f"{remaining} / 100")
+        quota_placeholder.metric("Search Remaining", f"{remaining} / 100")
         
-        with st.spinner(f"Querying Intelligence for '{target_input}'..."):
+        with st.spinner(f"Analyzing '{target_input}' with AI..."):
+            # A. Google検索
             news_results = []
             try:
-                query = f'{target_input} 再生医療 ニュース 2025' if not target_input.isascii() else f'{target_input} "cell therapy" news'
+                query = f'{target_input} 再生医療 ニュース 2025'
                 url = f"https://www.googleapis.com/customsearch/v1?key={GOOGLE_API_KEY}&cx={GOOGLE_CX}&q={query}"
-                response = requests.get(url)
-                data = response.json()
-                
+                data = requests.get(url).json()
                 if "items" in data:
                     for item in data["items"]:
-                        news_results.append({
-                            'title': item.get('title'),
-                            'source': item.get('displayLink'),
-                            'body': item.get('snippet'),
-                            'url': item.get('link')
-                        })
+                        news_results.append({'title': item.get('title'), 'body': item.get('snippet'), 'url': item.get('link')})
             except Exception as e:
-                st.error(f"API Error: {e}")
+                st.error(f"Search API Error: {e}")
 
-            st.divider()
-            
-            if not news_results:
-                st.warning("関連情報が見つかりませんでした。")
+            if news_results:
+                # B. AI分析
+                context = "\n".join([f"Title: {n['title']}\nSnippet: {n['body']}" for n in news_results[:5]])
+                prompt = f"以下の最新ニュースを読み、{target_input}の再生医療分野における現状と注目すべき動向を、プロの投資家の視点で3つの重要ポイントとして要約してください。\n\n{context}"
+                try:
+                    ai_response = model.generate_content(prompt).text
+                except:
+                    ai_response = "AI分析中にエラーが発生しました。"
+
+                # C. 履歴をFirestoreに保存
+                history_data = {
+                    "target": target_input,
+                    "ai_summary": ai_response,
+                    "news": news_results[:5],
+                    "timestamp": datetime.now()
+                }
+                history_ref.add(history_data)
+                st.session_state.history_data = history_data
             else:
-                st.subheader(f"📡 Real-time Intelligence: {target_input}")
-                cols = st.columns(2)
-                for idx, item in enumerate(news_results[:10]):
-                    with cols[idx % 2].expander(f"{item['title']}", expanded=True):
-                        st.caption(f"🏢 Source: {item['source']}")
-                        st.write(item['body'])
-                        st.markdown(f"[記事全文を読む]({item['url']})")
+                st.warning("情報が見つかりませんでした。")
 
-            # Wordレポート作成
-            doc = Document()
-            doc.add_heading(f'Strategic Report: {target_input}', 0)
-            doc.add_paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d')}")
-            for n in news_results[:10]:
-                doc.add_heading(n['title'], level=2)
-                doc.add_paragraph(n['body'])
-                doc.add_paragraph(f"URL: {n['url']}")
-            bio = BytesIO()
-            doc.save(bio)
-            st.download_button(label="💾 Download Summary Report", data=bio.getvalue(), file_name=f"{target_input}_Report.docx")
+# --- 5. 結果表示エリア ---
+if "history_data" in st.session_state:
+    data = st.session_state.history_data
+    st.divider()
+    st.subheader(f"🤖 AI Strategic Insight: {data['target']}")
+    st.info(data['ai_summary'])
+    
+    st.subheader("📡 Supporting Intelligence")
+    cols = st.columns(2)
+    for idx, n in enumerate(data['news']):
+        with cols[idx % 2].expander(n['title']):
+            st.write(n['body'])
+            st.markdown(f"[記事全文]({n['url']})")
+
+    # Wordレポート作成
+    doc = Document()
+    doc.add_heading(f"Analysis Report: {data['target']}", 0)
+    doc.add_heading("AI Strategic Insight", level=1)
+    doc.add_paragraph(data['ai_summary'])
+    doc.save(bio := BytesIO())
+    st.download_button("💾 Download Executive Report", bio.getvalue(), f"{data['target']}_Report.docx")
+
 
 
 
