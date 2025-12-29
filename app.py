@@ -92,17 +92,29 @@ if st.button("EXECUTE ANALYSIS"):
                 prompt_text = f"再生医療専門家として、{target_input}の動向を3点要約してください。\n\n{context}"
                 
                 try:
-                    # 404を回避するための直叩きURL (v1beta版)
-                    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
-                    payload = {"contents": [{"parts": [{"text": prompt_text}]}]}
-                    response = requests.post(api_url, json=payload, timeout=10)
-                    response.raise_for_status() 
-                    res_json = response.json()
+                    # プランA: gemini-1.5-flash (もっとも標準的)
+                    # プランB: gemini-pro (旧式だが安定している)
+                    # この2つを順番に試します
                     
-                    if "candidates" in res_json:
-                        ai_response = res_json["candidates"][0]["content"]["parts"][0]["text"]
-                    else:
-                        ai_response = "AIが応答しましたが、解析に失敗しました。"
+                    target_models = ["gemini-1.5-flash", "gemini-pro"]
+                    success = False
+                    
+                    for model_name in target_models:
+                        api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
+                        payload = {"contents": [{"parts": [{"text": prompt_text}]}]}
+                        
+                        response = requests.post(api_url, json=payload, timeout=10)
+                        
+                        if response.status_code == 200:
+                            res_json = response.json()
+                            if "candidates" in res_json:
+                                ai_response = res_json["candidates"][0]["content"]["parts"][0]["text"]
+                                success = True
+                                break # 成功したらループを抜ける
+                    
+                    if not success:
+                        ai_response = f"AIエラー: 全てのモデル(Flash/Pro)で404が発生しました。Google側のキー反映待ちの可能性があります。状況: {response.status_code}"
+
                 except Exception as ai_err:
                     ai_response = f"AI通信エラー詳細: {str(ai_err)}"
 
@@ -129,6 +141,7 @@ if "history_data" in st.session_state:
         with cols[idx % 2].expander(n['title']):
             st.write(n['body'])
             st.markdown(f"[全文]({n['url']})")
+
 
 
 
