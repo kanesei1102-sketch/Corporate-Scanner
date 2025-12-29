@@ -91,13 +91,28 @@ if st.button("EXECUTE ANALYSIS"):
 
             if news_results:
                 context = "\n".join([f"Title: {n['title']}\nSnippet: {n['body']}" for n in news_results[:5]])
-                prompt = f"再生医療専門家として、{target_input}の動向を3点要約してください。\n\n{context}"
+                prompt_text = f"再生医療専門家として、{target_input}の動向を3点要約してください。\n\n{context}"
                 
-                # --- AIエラーの詳細を表示するように設定 ---
+                # --- AIライブラリを使わず、直接Google API(v1)を叩く方式に変更 ---
                 try:
-                    ai_response = model.generate_content(prompt).text
+                    # v1betaではなく「v1」を明示的に指定したURL
+                    api_url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+                    payload = {
+                        "contents": [{
+                            "parts": [{"text": prompt_text}]
+                        }]
+                    }
+                    response = requests.post(api_url, json=payload)
+                    res_json = response.json()
+                    
+                    # AIの回答を抽出
+                    if "candidates" in res_json:
+                        ai_response = res_json["candidates"][0]["content"]["parts"][0]["text"]
+                    else:
+                        ai_response = f"AI応答エラー: {res_json.get('error', {}).get('message', '不明なエラー')}"
                 except Exception as ai_err:
-                    ai_response = f"AIエラー詳細: {str(ai_err)}"
+                    ai_response = f"通信エラー詳細: {str(ai_err)}"
+                # --------------------------------------------------------
 
                 history_data = {
                     "target": target_input,
@@ -122,6 +137,7 @@ if "history_data" in st.session_state:
         with cols[idx % 2].expander(n['title']):
             st.write(n['body'])
             st.markdown(f"[全文]({n['url']})")
+
 
 
 
