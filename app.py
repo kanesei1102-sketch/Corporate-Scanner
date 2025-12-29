@@ -4,55 +4,50 @@ from docx import Document
 from io import BytesIO
 from datetime import datetime
 
-# --- 【最重要】取得した鍵をここに貼り付け ---
-GOOGLE_API_KEY = "AIzaSyAk2sfv67SGkZ4gAiKPLdSPgSWIAYYO0zo"
-GOOGLE_CX = "<script async src="https://cse.google.com/cse.js?cx=43b6a568b52e34409">
-</script>
-<div class="gcse-search"></div>"
-
-st.set_page_config(page_title="Corporation-Scope Pro", layout="wide")
-
-# --- 設定（GitHub上には鍵を書かない！） ---
-# Streamlitの管理画面「Secrets」から読み込む設定に変更
+# --- セキュリティ設定（GitHub上には鍵を書きません） ---
+# Streamlit Cloudの管理画面「Secrets」に保存した鍵を読み込みます
 try:
     GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
     GOOGLE_CX = st.secrets["GOOGLE_CX"]
-except:
-    st.error("API設定（Secrets）が見つかりません。")
+except Exception:
+    st.error("【管理者へ】StreamlitのSecrets設定で APIキー と CX を登録してください。")
     st.stop()
-    
-# --- クレジット（残り回数）の計算機能 ---
-# Google APIは一度の検索で情報を返しますが、無料枠は1日100件です。
-# セッション内でカウントを管理します。
+
+st.set_page_config(page_title="Corporation-Scope Pro", layout="wide")
+
+# --- クレジット（残り回数）管理 ---
 if 'search_count' not in st.session_state:
     st.session_state.search_count = 0
 
 remaining = 100 - st.session_state.search_count
 
-# サイドバーにクレジットを表示
+# サイドバーにクレジットとパスワード機能を設置
+st.sidebar.title("🔐 Authentication")
+password = st.sidebar.text_input("Enter Passcode", type="password")
+
 st.sidebar.title("💳 API Quota")
 st.sidebar.metric(label="Remaining Searches (Today)", value=f"{remaining} / 100")
-if remaining < 10:
-    st.sidebar.warning("残り回数がわずかです！本番に備えて温存してください。")
 
 st.title("Corporation-Scope: Strategic Intelligence")
-st.caption("Google Search API 搭載：高精度・制限なしの業界特化スキャナー。")
+st.caption("Google Search API 搭載：再生医療・バイオ業界特化型スキャナー")
 
 target_input = st.text_input("Target Entity", placeholder="Enter name (e.g. セルリソーシズ, ENCell)...")
 
+# パスワードが一致するか確認（例として crc2025 にしています）
 if st.button("EXECUTE"):
-    if not target_input:
-        st.warning("Please enter a name.")
+    if password != "crc2025":
+        st.error("パスワードが正しくありません。")
+    elif not target_input:
+        st.warning("社名を入力してください。")
     elif remaining <= 0:
-        st.error("本日の無料検索枠（100回）を使い切りました。明日までお待ちください。")
+        st.error("本日の検索枠（100回）を使い切りました。")
     else:
-        with st.spinner(f"Querying Google Intelligence for '{target_input}'..."):
-            # 検索実行時にカウントを増やす
+        with st.spinner(f"Scanning Intelligence for '{target_input}'..."):
             st.session_state.search_count += 1
             
             news_results = []
             try:
-                # 検索精度の調整
+                # 検索クエリの最適化
                 query = f'{target_input} 再生医療 ニュース 2025' if not target_input.isascii() else f'{target_input} "cell therapy" news'
                 url = f"https://www.googleapis.com/customsearch/v1?key={GOOGLE_API_KEY}&cx={GOOGLE_CX}&q={query}"
                 
@@ -72,7 +67,6 @@ if st.button("EXECUTE"):
 
             st.divider()
             
-            # --- ニュース表示 ---
             if not news_results:
                 st.warning("関連情報が見つかりませんでした。")
             else:
@@ -84,7 +78,7 @@ if st.button("EXECUTE"):
                         st.write(item['body'])
                         st.markdown(f"[記事全文を読む]({item['url']})")
 
-            # Wordレポート作成（維持）
+            # Wordレポート作成
             doc = Document()
             doc.add_heading(f'Strategic Report: {target_input}', 0)
             doc.add_paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d')}")
@@ -95,6 +89,7 @@ if st.button("EXECUTE"):
             bio = BytesIO()
             doc.save(bio)
             st.download_button(label="💾 Download Summary Report", data=bio.getvalue(), file_name=f"{target_input}_Report.docx")
+
 
 
 
