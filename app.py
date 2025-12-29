@@ -53,15 +53,14 @@ st.sidebar.title("📜 Search History")
 # サイドバーに履歴ボタンを表示（西暦・日付付き）
 for h in recent_history:
     if 'timestamp' in h:
-        # FirestoreのTimestampオブジェクトをPythonのdatetimeに変換してフォーマット
         ts = h['timestamp']
+        # 西暦・月・日・時・分を表示
         date_str = ts.strftime('%Y/%m/%d %H:%M')
         t_key = ts.strftime('%Y%m%d%H%M%S%f')
     else:
         date_str = "Unknown Date"
         t_key = "unknown"
 
-    # ボタンラベルに「日付 + 企業名」を表示
     if st.sidebar.button(f"📅 {date_str}\n{h['target']}", key=f"btn_{t_key}"):
         st.session_state.history_data = h
 
@@ -87,7 +86,6 @@ if st.button("EXECUTE SCAN"):
         with st.spinner(f"Scanning latest news for {target_input}..."):
             news_results = []
             try:
-                # 検索クエリを最適化
                 query = f'{target_input} 再生医療 ニュース 2025'
                 url = f"https://www.googleapis.com/customsearch/v1?key={GOOGLE_API_KEY}&cx={GOOGLE_CX}&q={query}"
                 data = requests.get(url).json()
@@ -103,11 +101,38 @@ if st.button("EXECUTE SCAN"):
                 st.error(f"Search Error: {e}")
 
             if news_results:
-                # 履歴データを作成（AIサマリーの代わりにステータスを保存）
-                    history_data = {
+                # 履歴データを作成（全ての括弧を正しく閉じました）
+                history_data = {
                     "target": target_input,
                     "ai_summary": f"{target_input} に関する最新ニュースを {len(news_results)} 件取得しました。",
-                    "news": news_results[:6], # 上位6件を
+                    "news": news_results[:6],
+                    "timestamp": datetime.now()
+                }
+                # Firestoreへ保存
+                history_ref.add(history_data)
+                # 表示用セッションを更新
+                st.session_state.history_data = history_data
+                st.success("スキャン完了！履歴に保存しました。")
+            else:
+                st.warning("最新のニュースが見つかりませんでした。")
+
+# --- 5. 表示エリア ---
+if "history_data" in st.session_state:
+    d = st.session_state.history_data
+    st.divider()
+    
+    ts_display = d['timestamp']
+    # メイン画面にも西暦を表示
+    date_display = ts_display.strftime('%Y年%m月%d日 %H:%M') if hasattr(ts_display, 'strftime') else str(ts_display)
+        
+    st.subheader(f"📁 {d['target']}（{date_display} の結果）")
+    
+    cols = st.columns(2)
+    for idx, n in enumerate(d['news']):
+        with cols[idx % 2].expander(f"📌 {n['title']}", expanded=True):
+            st.write(n['body'])
+            st.markdown(f"[記事全文を読む]({n['url']})")
+
 
 
 
