@@ -104,10 +104,11 @@ if st.button("EXECUTE SCAN"):
 
             if news_results:
                 # 履歴データを作成（AIサマリーの代わりにステータスを保存）
-                history_data = {
+                    history_data = {
                     "target": target_input,
                     "ai_summary": f"{target_input} に関する最新ニュースを {len(news_results)} 件取得しました。",
                     "news": news_results[:6], # 上位6件を
+
 
 
 
