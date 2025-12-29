@@ -101,42 +101,39 @@ if st.button("EXECUTE ANALYSIS"):
                 context = "\n".join([f"Title: {n['title']}\nSnippet: {n['body']}" for n in news_results[:5]])
                 prompt_text = f"再生医療専門家として、{target_input}の動向を3点要約してください。また、今後の展望についても一言添えてください。\n\n検索結果:\n{context}"
                 
+                # --- 4. メイン処理（インデント修正版） ---
+
+# (中略: 検索処理など)
+
+            if news_results:
+                context = "\n".join([f"Title: {n['title']}\nSnippet: {n['body']}" for n in news_results[:5]])
+                prompt_text = f"再生医療専門家として、{target_input}の動向を3点要約してください。\n\n{context}"
+                
                 try:
-    # 1. APIキー（念のため前後の空白を削除）
-    current_key = "AIzaSyDKGUReXbwU0uB6j9wtRWNlxvLkZKiUjgg".strip()
-    
-    # 2. モデル名を 2.0-flash に更新し、パスに /models/ を追加
-    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={current_key}"
-    
-    # 3. リクエストボディ（最新の形式に準拠）
-    payload = {
-        "contents": [{
-            "parts": [{"text": prompt_text}]
-        }],
-        "generationConfig": {
-            "temperature": 0.7,
-            "maxOutputTokens": 1000
-        }
-    }
-    headers = {"Content-Type": "application/json"}
-    
-    # 4. 実行
-    response = requests.post(api_url, json=payload, headers=headers, timeout=20)
-    
-    if response.status_code == 200:
-        res_json = response.json()
-        # レスポンス構造の確認（念のため安全に取得）
-        candidates = res_json.get("candidates", [])
-        if candidates:
-            ai_response = candidates[0]["content"]["parts"][0]["text"]
-        else:
-            ai_response = "AIからの回答が空でした（セーフティフィルタによるブロックの可能性があります）"
-    else:
-        # エラーメッセージを詳細に表示
-        ai_response = f"AIエラー（{response.status_code}）: {response.text}"
-        
-except Exception as ai_err:
-    ai_response = f"実行中に例外が発生しました: {str(ai_err)}"
+                    # ★ ここから下の行はすべて「try:」より深くインデントしてください
+                    current_key = "AIzaSyDKGUReXbwU0uB6j9wtRWNlxvLkZKiUjgg".strip()
+                    
+                    # モデル名を最新の 2.0-flash に、パスに /models/ を追加
+                    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={current_key}"
+                    
+                    payload = {
+                        "contents": [{
+                            "parts": [{"text": prompt_text}]
+                        }]
+                    }
+                    headers = {"Content-Type": "application/json"}
+                    
+                    response = requests.post(api_url, json=payload, headers=headers, timeout=20)
+                    
+                    if response.status_code == 200:
+                        res_json = response.json()
+                        ai_response = res_json["candidates"][0]["content"]["parts"][0]["text"]
+                    else:
+                        ai_response = f"AIエラー（{response.status_code}）: {response.text}"
+                        
+                except Exception as ai_err:
+                    # ★ ここも「except:」より深くインデント
+                    ai_response = f"通信エラー: {str(ai_err)}"
 
                 # --- 履歴保存とセッション更新 ---
                 history_data = {
@@ -147,7 +144,7 @@ except Exception as ai_err:
                 }
                 history_ref.add(history_data)
                 st.session_state.history_data = history_data
-                st.rerun() # 画面を更新して結果を表示
+                st.rerun() # 結果を表示するために画面をリフレッシュ
 
 # --- 5. 表示 ---
 if "history_data" in st.session_state:
@@ -161,6 +158,7 @@ if "history_data" in st.session_state:
         with cols[idx % 2].expander(n['title']):
             st.write(n['body'])
             st.markdown(f"[全文]({n['url']})")
+
 
 
 
