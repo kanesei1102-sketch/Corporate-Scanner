@@ -20,17 +20,34 @@ MASTER_RECORDS = {
 }
 
 def get_final_official_site(query):
-    clean_query = query.lower().strip()
-    if clean_query in MASTER_RECORDS:
-        return MASTER_RECORDS[clean_query]
+    # 特定のマスターリストは最小限（ソニーなど超有名所のみ）にするか、空にする
     try:
         with DDGS() as ddgs:
-            results = list(ddgs.text(f"{query} 株式会社 公式", max_results=10))
-            noise_list = ["microsoft.com", "wikipedia.org", "facebook.com", "youtube.com"]
+            # 検索ワードに「株式会社 公式」を加えて精度を最大化
+            search_query = f"{query} 株式会社 公式"
+            results = list(ddgs.text(search_query, max_results=15))
+            
+            # 除外したいドメインを強化
+            noise_list = [
+                "wikipedia.org", "facebook.com", "youtube.com", "twitter.com", 
+                "mapion.co.jp", "tabelog.com", "navitime.co.jp", "求人", "indeed"
+            ]
+            
             for r in results:
                 url = r['href'].lower()
-                if not any(noise in url for noise in noise_list):
+                title = r['title']
+                
+                # 1. 広告やSNS、地図サイトを除外
+                if any(noise in url for noise in noise_list):
+                    continue
+                
+                # 2. タイトルに「公式」や「ホーム」や「株式会社」が含まれているものを優先
+                if any(k in title for k in ["公式", "ホーム", "株式会社", "Corporate"]):
                     return r['href']
+            
+            # 見つからなかった場合の保険として、一番上の結果を返す
+            if results:
+                return results[0]['href']
     except: pass
     return None
 
@@ -124,3 +141,4 @@ if st.button("EXECUTE"):
                         with st.expander(f"{item['title']}", expanded=True):
                             st.write(item['body'])
                             st.markdown(f"[Source Article]({item['url']})")
+
