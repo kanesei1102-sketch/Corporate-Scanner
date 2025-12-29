@@ -98,7 +98,22 @@ if st.button("EXECUTE ANALYSIS"):
             if news_results:
                 # B. AI分析
                 context = "\n".join([f"Title: {n['title']}\nSnippet: {n['body']}" for n in news_results[:5]])
-                prompt = f"以下の最新ニュースを読み、{target_input}の再生医療分野における現状と注目すべき動向を、プロの投資家の視点で3つの重要ポイントとして要約してください。\n\n{context}"
+               # --- ここを書き換え ---
+                prompt = f"""
+                あなたは再生医療・バイオテック専門のシニアアナリストです。
+                
+                【目的】
+                提示されたニュースから、企業「{target_input}」の現状を投資家視点で整理してください。
+                
+                【ニュース内容】
+                {context}
+                
+                【出力ルール】
+                1. 必ず日本語で回答すること。
+                2. 重要なポイントを3つ、箇条書きで簡潔にまとめること。
+                3. もしニュースが少ない場合は、その中で読み取れる兆候や一般的な業界動向を補足すること。
+                """
+                # --------------------
                 try:
                     ai_response = model.generate_content(prompt).text
                 except:
@@ -137,6 +152,7 @@ if "history_data" in st.session_state:
     doc.add_paragraph(data['ai_summary'])
     doc.save(bio := BytesIO())
     st.download_button("💾 Download Executive Report", bio.getvalue(), f"{data['target']}_Report.docx")
+
 
 
 
