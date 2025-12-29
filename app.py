@@ -21,7 +21,6 @@ except Exception as e:
     st.stop()
 
 # --- 2. データベース（Firestore）から今日の使用回数を取得 ---
-# 毎日日本時間のAM0時にリセットしたい場合は、日付をキーにします
 today_str = datetime.now().strftime('%Y-%m-%d')
 doc_ref = db.collection("daily_usage").document(today_str)
 
@@ -40,12 +39,14 @@ remaining = 100 - current_usage
 # --- 3. 画面レイアウト ---
 st.set_page_config(page_title="Corporation-Scope Pro", layout="wide")
 
-# サイドバー：更新しても減ったままのクレジットを表示
+# サイドバー表示
 st.sidebar.title("🔐 Authentication")
 password = st.sidebar.text_input("Enter Passcode", type="password")
 
 st.sidebar.title("💳 Global Quota")
-st.sidebar.metric(label="Today's Remaining", value=f"{remaining} / 100")
+# プレースホルダーを作って、ボタン押下時に即書き換えられるようにする
+quota_placeholder = st.sidebar.empty()
+quota_placeholder.metric(label="Today's Remaining", value=f"{remaining} / 100")
 st.sidebar.caption("※この数字は全ユーザーで共有・同期されています。")
 
 st.title("Corporation-Scope: Strategic Intelligence")
@@ -53,7 +54,7 @@ st.caption("Firestore & Google Search API 連動：更新しても利用状況�
 
 target_input = st.text_input("Target Entity", placeholder="Enter name (e.g. セルリソーシズ, ENCell)...")
 
-# --- ここからインデントに注意して貼り付け ---
+# --- 4. 実行処理 ---
 if st.button("EXECUTE"):
     if password != "crc2025":
         st.error("パスワードが正しくありません。")
@@ -62,10 +63,11 @@ if st.button("EXECUTE"):
     elif remaining <= 0:
         st.error("本日の無料検索枠（100回）を使い切りました。")
     else:
-        # 1. 検索前にデータベースを更新
+        # データベースを更新
         doc_ref.update({"count": firestore.Increment(1)})
-        # 2. 画面上の変数も即座に減らす（これでカウンターが即動く）
+        # 画面上の表示を即座にデクリメントして書き換え（これで「同時」に見える）
         remaining -= 1
+        quota_placeholder.metric(label="Today's Remaining", value=f"{remaining} / 100")
         
         with st.spinner(f"Querying Intelligence for '{target_input}'..."):
             news_results = []
@@ -91,9 +93,6 @@ if st.button("EXECUTE"):
             if not news_results:
                 st.warning("関連情報が見つかりませんでした。")
             else:
-                # サイドバーを最新の remaining で再描画するための工夫（オプション）
-                st.sidebar.empty() 
-                
                 st.subheader(f"📡 Real-time Intelligence: {target_input}")
                 cols = st.columns(2)
                 for idx, item in enumerate(news_results[:10]):
@@ -102,7 +101,7 @@ if st.button("EXECUTE"):
                         st.write(item['body'])
                         st.markdown(f"[記事全文を読む]({item['url']})")
 
-            # Wordレポート作成（維持）
+            # Wordレポート作成
             doc = Document()
             doc.add_heading(f'Strategic Report: {target_input}', 0)
             doc.add_paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d')}")
@@ -113,6 +112,7 @@ if st.button("EXECUTE"):
             bio = BytesIO()
             doc.save(bio)
             st.download_button(label="💾 Download Summary Report", data=bio.getvalue(), file_name=f"{target_input}_Report.docx")
+
 
 
 
