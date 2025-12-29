@@ -93,11 +93,10 @@ if st.button("EXECUTE ANALYSIS"):
                 context = "\n".join([f"Title: {n['title']}\nSnippet: {n['body']}" for n in news_results[:5]])
                 prompt_text = f"再生医療専門家として、{target_input}の動向を3点要約してください。\n\n{context}"
                 
-                # --- 直接Google API(v1)を叩く究極の安定版 ---
+                # --- v1がダメなら、新設キーに強い v1beta を試します ---
                 try:
-                    # モデル名を含んだ正規のURL構成に戻します
-                    # v1beta ではなく v1 を使い、models/ を明示します
-                    api_url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+                    # v1 を v1beta に書き換えました
+                    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
                     
                     payload = {
                         "contents": [{
@@ -105,21 +104,16 @@ if st.button("EXECUTE ANALYSIS"):
                         }]
                     }
                     
-                    # タイムアウトを設定して、応答がない場合に備えます
                     response = requests.post(api_url, json=payload, timeout=10)
-                    
-                    # ここでエラーがあれば即座に例外を発生させます
                     response.raise_for_status() 
-                    
                     res_json = response.json()
                     
                     if "candidates" in res_json:
                         ai_response = res_json["candidates"][0]["content"]["parts"][0]["text"]
                     else:
-                        ai_response = "AIは結果を出しましたが、要約形式ではありませんでした。"
+                        ai_response = "AIが応答しましたが、解析に失敗しました。"
                         
                 except Exception as ai_err:
-                    # 詳細なエラーを出して、原因を特定します
                     ai_response = f"AI通信エラー詳細: {str(ai_err)}"
 
                 history_data = {
@@ -145,6 +139,7 @@ if "history_data" in st.session_state:
         with cols[idx % 2].expander(n['title']):
             st.write(n['body'])
             st.markdown(f"[全文]({n['url']})")
+
 
 
 
