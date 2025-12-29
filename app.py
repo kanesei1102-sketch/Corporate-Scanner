@@ -92,32 +92,34 @@ if st.button("EXECUTE ANALYSIS"):
                 prompt_text = f"再生医療専門家として、{target_input}の動向を3点要約してください。\n\n{context}"
                 
                 try:
-                    # プランA: gemini-1.5-flash (もっとも標準的)
-                    # プランB: gemini-pro (旧式だが安定している)
-                    # この2つを順番に試します
+                    # 【重要】新しいキーに最適な v1 安定版URLです
+                    api_url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
                     
-                    target_models = ["gemini-1.5-flash", "gemini-pro"]
-                    success = False
+                    payload = {
+                        "contents": [{
+                            "parts": [{"text": prompt_text}]
+                        }]
+                    }
                     
-                    for model_name in target_models:
-                        api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
-                        payload = {"contents": [{"parts": [{"text": prompt_text}]}]}
-                        
-                        response = requests.post(api_url, json=payload, timeout=10)
-                        
-                        if response.status_code == 200:
-                            res_json = response.json()
-                            if "candidates" in res_json:
-                                ai_response = res_json["candidates"][0]["content"]["parts"][0]["text"]
-                                success = True
-                                break # 成功したらループを抜ける
+                    response = requests.post(api_url, json=payload, timeout=15)
                     
-                    if not success:
-                        ai_response = f"AIエラー: 全てのモデル(Flash/Pro)で404が発生しました。Google側のキー反映待ちの可能性があります。状況: {response.status_code}"
+                    # 万が一 v1 で 404 が出た場合のバックアップ
+                    if response.status_code == 404:
+                        api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+                        response = requests.post(api_url, json=payload, timeout=15)
 
+                    response.raise_for_status() 
+                    res_json = response.json()
+                    
+                    if "candidates" in res_json:
+                        ai_response = res_json["candidates"][0]["content"]["parts"][0]["text"]
+                    else:
+                        ai_response = "AI分析は完了しましたが、形式が正しくありませんでした。"
+                        
                 except Exception as ai_err:
                     ai_response = f"AI通信エラー詳細: {str(ai_err)}"
 
+                # --- 履歴保存とセッション更新 ---
                 history_data = {
                     "target": target_input,
                     "ai_summary": ai_response,
@@ -127,7 +129,7 @@ if st.button("EXECUTE ANALYSIS"):
                 history_ref.add(history_data)
                 st.session_state.history_data = history_data
             else:
-                st.warning("情報なし")
+                st.warning("最新のニュースが見つかりませんでした。")
 
 # --- 5. 表示 ---
 if "history_data" in st.session_state:
@@ -141,6 +143,7 @@ if "history_data" in st.session_state:
         with cols[idx % 2].expander(n['title']):
             st.write(n['body'])
             st.markdown(f"[全文]({n['url']})")
+
 
 
 
