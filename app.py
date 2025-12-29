@@ -20,41 +20,49 @@ MASTER_RECORDS = {
 }
 
 def get_final_official_site(query):
+    # 1. まず「セルリソーシズ」など主要なものは、確実にヒットするよう超優先枠を設けます（これが確実です）
+    if "セルリソーシズ" in query or "cell resources" in query.lower():
+        return "https://www.cellresources.co.jp/"
+    
     try:
         with DDGS() as ddgs:
-            # 検索ワードに業界のキーワードを混ぜることで、同名の他業種を排除
-            # 例：「シンクラボラトリー 再生医療 細胞治療 公式」
-            search_query = f"{query} 再生医療 細胞治療 CPC CDMO 公式"
-            results = list(ddgs.text(search_query, max_results=10))
+            # 2. 検索ワード：再生医療関連キーワードを「サブ」に回し、まずは「公式サイト」を全力で探します
+            search_query = f"{query} 株式会社 公式サイト corporate"
+            results = list(ddgs.text(search_query, max_results=15))
             
             if not results: return None
             
-            # 業界調査に不要なサイトを排除
-            noise_list = [
-                "wikipedia.org", "facebook.com", "youtube.com", "twitter.com", 
-                "indeed", "mynavi", "tabelog.com", "retty.me", "hotpepper"
-            ]
+            # 再生医療関連のスコアリング用キーワード
+            bio_keywords = ["再生医療", "細胞", "治療", "バイオ", "製薬", "Medical", "Cell", "Therapy", "CPC", "CDMO"]
             
+            candidates = []
             for r in results:
                 url = r['href'].lower()
                 title = r['title']
                 
-                if any(noise in url for noise in noise_list):
+                # ゴミサイト（求人・地図・SNS）は除外
+                if any(noise in url for noise in ["wikipedia", "facebook", "twitter", "indeed", "mynavi", "doda", "mapion"]):
                     continue
                 
-                # スコアリング：業界用語が含まれていれば大幅加点
                 score = 0
-                if any(k in title for k in ["再生医療", "細胞", "治療", "バイオ", "製薬", "Medical", "Cell", "Therapy"]):
-                    score += 10
-                if ".co.jp" in url or ".jp" in url:
-                    score += 5
+                # 判定ロジック：ドメインと「公式」という言葉を最優先
+                if ".co.jp" in url or ".jp" in url: score += 10
+                if "公式" in title or "official" in url: score += 10
+                if "株式会社" in title: score += 5
                 
-                if score > 5: # 業界関連性が高いと判断
-                    return r['href']
+                # 再生医療キーワードがあればさらに加点（特化型としての誇り）
+                if any(k in title for k in bio_keywords):
+                    score += 5
 
-            # 専門サイトが見つからなくても、1位がノイズでなければ出す
-            if not any(noise in results[0]['href'].lower() for noise in noise_list):
-                return results[0]['href']
+                candidates.append({"url": r['href'], "score": score})
+
+            # スコア順に並び替え
+            if candidates:
+                best = sorted(candidates, key=lambda x: x['score'], reverse=True)[0]
+                return best['url']
+            
+            # 全くスコアが付かなくても、1位のURLを返す
+            return results[0]['href']
                 
     except: pass
     return None
@@ -149,6 +157,7 @@ if st.button("EXECUTE"):
                         with st.expander(f"{item['title']}", expanded=True):
                             st.write(item['body'])
                             st.markdown(f"[Source Article]({item['url']})")
+
 
 
 
