@@ -3,64 +3,71 @@ import requests
 from docx import Document
 from io import BytesIO
 from datetime import datetime
+from google.cloud import firestore
+from google.oauth2 import service_account
+import json
 
-# --- セキュリティ設定（GitHub上には鍵を書きません） ---
-# Streamlit Cloudの管理画面「Secrets」に保存した鍵を読み込みます
+# --- 1. セキュリティ設定（Secretsから読み込み） ---
 try:
     GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
     GOOGLE_CX = st.secrets["GOOGLE_CX"]
-except Exception:
-    st.error("【管理者へ】StreamlitのSecrets設定で APIキー と CX を登録してください。")
+    
+    # Firestoreの認証情報を読み込み
+    key_dict = json.loads(st.secrets["FIRESTORE_KEY"])
+    creds = service_account.Credentials.from_service_account_info(key_dict)
+    db = firestore.Client(credentials=creds, project=key_dict["project_id"])
+except Exception as e:
+    st.error(f"システム設定エラー: Secretsを確認してください。 ({e})")
     st.stop()
 
+# --- 2. データベース（Firestore）から今日の使用回数を取得 ---
+# 毎日日本時間のAM0時にリセットしたい場合は、日付をキーにします
+today_str = datetime.now().strftime('%Y-%m-%d')
+doc_ref = db.collection("daily_usage").document(today_str)
+
+try:
+    doc = doc_ref.get()
+    if not doc.exists:
+        doc_ref.set({"count": 0})
+        current_usage = 0
+    else:
+        current_usage = doc.to_dict().get("count", 0)
+except Exception:
+    current_usage = 0
+
+remaining = 100 - current_usage
+
+# --- 3. 画面レイアウト ---
 st.set_page_config(page_title="Corporation-Scope Pro", layout="wide")
 
-# --- クレジット（残り回数）の管理 ---
-# ※ブラウザを更新するとセッションが切れるため、カウントはリセットされます。
-# 1月30日のランチ用には、あえて「セッション中の利用数」として提示するのがスマートです。
-if 'search_count' not in st.session_state:
-    st.session_state.search_count = 0
-
-remaining = 100 - st.session_state.search_count
-
-# サイドバー：実用性とプロフェッショナル感を両立した表示
-st.sidebar.title("🔐 System Status")
-st.sidebar.info("Connected to Google Search API")
-
-st.sidebar.title("💳 Session Quota")
-# リセットされることを逆手に取り、「このセッションでの残り」として表示
-st.sidebar.metric(label="Available in this session", value=f"{remaining} / 100")
-
-st.sidebar.caption("※Daily total limit: 100 searches (Google Standard)")
-
-# パスワード機能（維持）
+# サイドバー：更新しても減ったままのクレジットを表示
+st.sidebar.title("🔐 Authentication")
 password = st.sidebar.text_input("Enter Passcode", type="password")
-st.sidebar.title("💳 API Quota")
-st.sidebar.metric(label="Remaining Searches (Today)", value=f"{remaining} / 100")
+
+st.sidebar.title("💳 Global Quota")
+st.sidebar.metric(label="Today's Remaining", value=f"{remaining} / 100")
+st.sidebar.caption("※この数字は全ユーザーで共有・同期されています。")
 
 st.title("Corporation-Scope: Strategic Intelligence")
-st.caption("Google Search API 搭載：再生医療・バイオ業界特化型スキャナー")
+st.caption("Firestore & Google Search API 連動：更新しても利用状況を完全維持するプロ仕様。")
 
 target_input = st.text_input("Target Entity", placeholder="Enter name (e.g. セルリソーシズ, ENCell)...")
 
-# パスワードが一致するか確認（例として crc2025 にしています）
 if st.button("EXECUTE"):
     if password != "crc2025":
         st.error("パスワードが正しくありません。")
     elif not target_input:
         st.warning("社名を入力してください。")
     elif remaining <= 0:
-        st.error("本日の検索枠（100回）を使い切りました。")
+        st.error("本日の無料検索枠（100回）を使い切りました。")
     else:
-        with st.spinner(f"Scanning Intelligence for '{target_input}'..."):
-            st.session_state.search_count += 1
+        with st.spinner(f"Querying Intelligence for '{target_input}'..."):
             
+            # 🔍 検索実行
             news_results = []
             try:
-                # 検索クエリの最適化
                 query = f'{target_input} 再生医療 ニュース 2025' if not target_input.isascii() else f'{target_input} "cell therapy" news'
                 url = f"https://www.googleapis.com/customsearch/v1?key={GOOGLE_API_KEY}&cx={GOOGLE_CX}&q={query}"
-                
                 response = requests.get(url)
                 data = response.json()
                 
@@ -72,6 +79,12 @@ if st.button("EXECUTE"):
                             'body': item.get('snippet'),
                             'url': item.get('link')
                         })
+                    
+                    # ✅ 検索成功時のみFirestoreのカウントを+1（更新しても戻らない！）
+                    doc_ref.update({"count": firestore.Increment(1)})
+                    # 画面表示用の数字も即座に更新
+                    remaining -= 1
+                    
             except Exception as e:
                 st.error(f"API Error: {e}")
 
@@ -99,6 +112,7 @@ if st.button("EXECUTE"):
             bio = BytesIO()
             doc.save(bio)
             st.download_button(label="💾 Download Summary Report", data=bio.getvalue(), file_name=f"{target_input}_Report.docx")
+
 
 
 
