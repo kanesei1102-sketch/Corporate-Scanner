@@ -53,8 +53,8 @@ st.caption("Firestore & Google Search API 連動：更新しても利用状況�
 
 target_input = st.text_input("Target Entity", placeholder="Enter name (e.g. セルリソーシズ, ENCell)...")
 
-
-  if st.button("EXECUTE"):
+# --- ここからインデントに注意して貼り付け ---
+if st.button("EXECUTE"):
     if password != "crc2025":
         st.error("パスワードが正しくありません。")
     elif not target_input:
@@ -62,16 +62,12 @@ target_input = st.text_input("Target Entity", placeholder="Enter name (e.g. セ�
     elif remaining <= 0:
         st.error("本日の無料検索枠（100回）を使い切りました。")
     else:
-        # --- ここが重要！ ---
-        # 1. 検索前にFirestoreの数字を+1する
+        # 1. 検索前にデータベースを更新
         doc_ref.update({"count": firestore.Increment(1)})
-        
-        # 2. 画面上の変数(remaining)もその場で1引く
+        # 2. 画面上の変数も即座に減らす（これでカウンターが即動く）
         remaining -= 1
         
-        # 3. 検索を実行する
         with st.spinner(f"Querying Intelligence for '{target_input}'..."):
-            # (以下、これまでの検索ロジックと同じ)
             news_results = []
             try:
                 query = f'{target_input} 再生医療 ニュース 2025' if not target_input.isascii() else f'{target_input} "cell therapy" news'
@@ -88,8 +84,6 @@ target_input = st.text_input("Target Entity", placeholder="Enter name (e.g. セ�
                             'url': item.get('link')
                         })
             except Exception as e:
-                st.error(f"API Error: {e}")                  
-            except Exception as e:
                 st.error(f"API Error: {e}")
 
             st.divider()
@@ -97,6 +91,9 @@ target_input = st.text_input("Target Entity", placeholder="Enter name (e.g. セ�
             if not news_results:
                 st.warning("関連情報が見つかりませんでした。")
             else:
+                # サイドバーを最新の remaining で再描画するための工夫（オプション）
+                st.sidebar.empty() 
+                
                 st.subheader(f"📡 Real-time Intelligence: {target_input}")
                 cols = st.columns(2)
                 for idx, item in enumerate(news_results[:10]):
@@ -105,7 +102,7 @@ target_input = st.text_input("Target Entity", placeholder="Enter name (e.g. セ�
                         st.write(item['body'])
                         st.markdown(f"[記事全文を読む]({item['url']})")
 
-            # Wordレポート作成
+            # Wordレポート作成（維持）
             doc = Document()
             doc.add_heading(f'Strategic Report: {target_input}', 0)
             doc.add_paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d')}")
@@ -116,8 +113,6 @@ target_input = st.text_input("Target Entity", placeholder="Enter name (e.g. セ�
             bio = BytesIO()
             doc.save(bio)
             st.download_button(label="💾 Download Summary Report", data=bio.getvalue(), file_name=f"{target_input}_Report.docx")
-
-
 
 
 
