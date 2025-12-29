@@ -12,6 +12,15 @@ GOOGLE_CX = "<script async src="https://cse.google.com/cse.js?cx=43b6a568b52e344
 
 st.set_page_config(page_title="Corporation-Scope Pro", layout="wide")
 
+# --- 設定（GitHub上には鍵を書かない！） ---
+# Streamlitの管理画面「Secrets」から読み込む設定に変更
+try:
+    GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
+    GOOGLE_CX = st.secrets["GOOGLE_CX"]
+except:
+    st.error("API設定（Secrets）が見つかりません。")
+    st.stop()
+    
 # --- クレジット（残り回数）の計算機能 ---
 # Google APIは一度の検索で情報を返しますが、無料枠は1日100件です。
 # セッション内でカウントを管理します。
@@ -86,6 +95,7 @@ if st.button("EXECUTE"):
             bio = BytesIO()
             doc.save(bio)
             st.download_button(label="💾 Download Summary Report", data=bio.getvalue(), file_name=f"{target_input}_Report.docx")
+
 
 
 
