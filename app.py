@@ -8,21 +8,18 @@ from google.oauth2 import service_account
 import json
 import google.generativeai as genai
 
-# --- 1. 初期設定 (修正版) ---
+# --- 1. 初期設定 ---
 try:
     GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
     GOOGLE_CX = st.secrets["GOOGLE_CX"]
     GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
     
-    # Firestore設定
     key_dict = json.loads(st.secrets["FIRESTORE_KEY"])
     creds = service_account.Credentials.from_service_account_info(key_dict)
     db = firestore.Client(credentials=creds, project=key_dict["project_id"])
     
-    # 【ここを修正】通信方式を 'rest' に固定して、404エラーを回避します
+    # ライブラリ側の設定（念のため残す）
     genai.configure(api_key=GEMINI_API_KEY, transport='rest')
-    model = genai.GenerativeModel('gemini-1.5-flash')
-    
 except Exception as e:
     st.error(f"システム設定エラー: {e}")
     st.stop()
@@ -45,40 +42,26 @@ try:
 except:
     recent_history = []
 
-# --- 3. レイアウト ---
+# --- 3. レイアウト（ここを整理しました） ---
 st.set_page_config(page_title="Intel-Scope Personal", layout="wide")
 
+# サイドバー
 st.sidebar.title("🔐 Auth & Quota")
-password = st.sidebar.text_input("Passcode", type="password")
+password = st.sidebar.text_input("Passcode", type="password") # ここが重複していた原因
 quota_placeholder = st.sidebar.empty()
 quota_placeholder.metric("Search Remaining", f"{remaining} / 100")
 
 st.sidebar.divider()
 st.sidebar.title("📜 Recent History")
-
-st.title("Intel-Scope: Personal AI Consultant")
-target_input = st.text_input("Target Entity", placeholder="企業名を入力...")
-# --- 3. レイアウト ---
-st.set_page_config(page_title="Intel-Scope Personal", layout="wide")
-
-# サイドバーの中身を全部ここで書き切る
-st.sidebar.title("🔐 Auth & Quota")
-password = st.sidebar.text_input("Passcode", type="password")
-quota_placeholder = st.sidebar.empty()
-quota_placeholder.metric("Search Remaining", f"{remaining} / 100")
-
-st.sidebar.divider()
-st.sidebar.title("📜 Recent History")
-
-# 履歴ボタンのループをここに持ってくる
 for h in recent_history:
     t_str = h['timestamp'].strftime('%Y%m%d%H%M%S') if hasattr(h['timestamp'], 'strftime') else str(h['timestamp'])
     if st.sidebar.button(f"🕒 {h['target']}", key=f"btn_{t_str}"):
         st.session_state.history_data = h
 
-# メイン画面の中身はここから
+# メイン画面
 st.title("Intel-Scope: Personal AI Consultant")
 target_input = st.text_input("Target Entity", placeholder="企業名を入力...")
+
 # --- 4. メイン処理 ---
 if st.button("EXECUTE ANALYSIS"):
     if password != "crc2025":
@@ -108,17 +91,10 @@ if st.button("EXECUTE ANALYSIS"):
                 context = "\n".join([f"Title: {n['title']}\nSnippet: {n['body']}" for n in news_results[:5]])
                 prompt_text = f"再生医療専門家として、{target_input}の動向を3点要約してください。\n\n{context}"
                 
-                # --- v1がダメなら、新設キーに強い v1beta を試します ---
                 try:
-                    # v1 を v1beta に書き換えました
+                    # 404を回避するための直叩きURL (v1beta版)
                     api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
-                    
-                    payload = {
-                        "contents": [{
-                            "parts": [{"text": prompt_text}]
-                        }]
-                    }
-                    
+                    payload = {"contents": [{"parts": [{"text": prompt_text}]}]}
                     response = requests.post(api_url, json=payload, timeout=10)
                     response.raise_for_status() 
                     res_json = response.json()
@@ -127,7 +103,6 @@ if st.button("EXECUTE ANALYSIS"):
                         ai_response = res_json["candidates"][0]["content"]["parts"][0]["text"]
                     else:
                         ai_response = "AIが応答しましたが、解析に失敗しました。"
-                        
                 except Exception as ai_err:
                     ai_response = f"AI通信エラー詳細: {str(ai_err)}"
 
@@ -154,6 +129,7 @@ if "history_data" in st.session_state:
         with cols[idx % 2].expander(n['title']):
             st.write(n['body'])
             st.markdown(f"[全文]({n['url']})")
+
 
 
 
