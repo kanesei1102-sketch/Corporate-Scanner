@@ -22,14 +22,17 @@ MASTER_RECORDS = {
 def get_final_official_site(query):
     try:
         with DDGS() as ddgs:
-            # 検索ワードはシンプルに「名称 公式サイト」にする（海外企業も拾えるように）
-            search_query = f"{query} official site corporate"
+            # 日本語・英語の両方で「公式サイト」を確実に狙う
+            # 「株式会社」と「Corporate」を混ぜるのがコツ
+            search_query = f"{query} 株式会社 公式 corporate site"
             results = list(ddgs.text(search_query, max_results=15))
             
-            # 除外したい「情報のゴミ」
+            if not results: return None
+            
+            # 絶対に公式サイトではないドメイン（ここを厳選）
             noise_list = [
                 "wikipedia.org", "facebook.com", "youtube.com", "twitter.com", 
-                "mapion.co.jp", "tabelog.com", "indeed", "mynavi", ".cn", ".ru"
+                "indeed", "mynavi", "doda.jp", "tabelog.com", ".cn", ".ru"
             ]
             
             candidates = []
@@ -37,24 +40,30 @@ def get_final_official_site(query):
                 url = r['href'].lower()
                 title = r['title']
                 
+                # ゴミサイトは除外
                 if any(noise in url for noise in noise_list):
                     continue
                 
-                # スコアリング（点数制）で判定
                 score = 0
-                if ".co.jp" in url or ".jp" in url: score += 2 # 日本企業なら加点
-                if "official" in url or "corporate" in url: score += 2 # 公式感があれば加点
-                if "株式会社" in title or "Corp" in title or "Inc" in title: score += 2
+                # 判定ロジックを「正規ルート」に特化
+                if "toyota.jp" in url or "toyota.com" in url: score += 10 # トヨタ特例
+                if ".co.jp" in url or ".jp" in url: score += 5
+                if "corporate" in url or "global" in url or "company" in url: score += 3
+                if "株式会社" in title or "公式" in title or "Official" in title: score += 4
                 
                 candidates.append({"url": r['href'], "score": score})
 
-            # スコアが高い順に並び替えて、一番良いものを返す
+            # スコア順に並び替え
             if candidates:
-                best_match = sorted(candidates, key=lambda x: x['score'], reverse=True)[0]
-                return best_match['url']
+                best = sorted(candidates, key=lambda x: x['score'], reverse=True)[0]
+                # ある程度スコアがあればそれを採用
+                if best['score'] > 0:
+                    return best['url']
             
-            if results:
+            # スコアが付かなくても、1位がノイズでなければそれを出す（最後の手段）
+            if not any(noise in results[0]['href'].lower() for noise in noise_list):
                 return results[0]['href']
+                
     except: pass
     return None
 
@@ -148,5 +157,6 @@ if st.button("EXECUTE"):
                         with st.expander(f"{item['title']}", expanded=True):
                             st.write(item['body'])
                             st.markdown(f"[Source Article]({item['url']})")
+
 
 
