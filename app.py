@@ -61,9 +61,11 @@ if st.button("EXECUTE"):
     elif remaining <= 0:
         st.error("本日の無料検索枠（100回）を使い切りました。")
     else:
-        # --- ここから修正：検索開始の直前にカウントアップを移動 ---
+  # --- 修正箇所：ボタンを押した直後 ---
         doc_ref.update({"count": firestore.Increment(1)})
-        # --------------------------------------------------
+        
+        # 画面を強制的に「再描画」させて、最新のFirestoreの値を反映させる
+        st.rerun()
 
         with st.spinner(f"Querying Intelligence for '{target_input}'..."):
             # (以下、検索処理...)
@@ -117,6 +119,7 @@ if st.button("EXECUTE"):
             bio = BytesIO()
             doc.save(bio)
             st.download_button(label="💾 Download Summary Report", data=bio.getvalue(), file_name=f"{target_input}_Report.docx")
+
 
 
 
