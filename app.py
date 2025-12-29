@@ -18,18 +18,25 @@ if st.button("EXECUTE"):
     else:
         with st.spinner(f"Analyzing '{target_input}'..."):
             
-            # 1. 上場判定（マーケットステータス）
+          # 1. 上場判定（グローバル市場対応版）
             is_public = False
-            public_keywords = ["sony", "ソニー", "トヨタ", "toyota", "terumo", "テルモ"]
+            # 明らかな上場企業キーワード
+            public_keywords = ["sony", "ソニー", "トヨタ", "toyota", "terumo", "テルモ", "encell"]
+            
             if any(k in target_input.lower() for k in public_keywords):
                 is_public = True
             else:
                 try:
                     with DDGS() as ddgs:
-                        s_res = list(ddgs.text(f"{target_input} 株価 銘柄コード 証券", max_results=5))
+                        # 英語圏の証券用語「Stock Price」「Ticker」を混ぜて検索
+                        s_res = list(ddgs.text(f"{target_input} stock price ticker 銘柄コード", max_results=8))
                         for s in s_res:
-                            if any(k in s['href'].lower() for k in ["finance.yahoo", "kabutan", "nikkei.com", "shikiho.jp"]):
-                                # セルリソーシズは親会社関連でヒットするが自社は非上場
+                            # 判定用ドメインに海外勢（Investing.com, Reuters, Bloomberg等）を追加
+                            if any(k in s['href'].lower() for k in [
+                                "finance.yahoo", "kabutan", "nikkei.com", "shikiho.jp", 
+                                "investing.com", "reuters.com", "bloomberg.com", "marketwatch"
+                            ]):
+                                # セルリソーシズ自体の非上場判定は維持
                                 if "セルリソーシズ" in target_input: continue 
                                 is_public = True
                                 break
@@ -101,6 +108,7 @@ if st.button("EXECUTE"):
             bio = BytesIO()
             doc.save(bio)
             st.download_button(label="💾 Download Summary Report", data=bio.getvalue(), file_name=f"{target_input}_Report.docx")
+
 
 
 
