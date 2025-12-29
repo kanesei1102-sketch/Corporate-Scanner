@@ -114,10 +114,10 @@ if st.button("EXECUTE ANALYSIS"):
                 3. もしニュースが少ない場合は、その中で読み取れる兆候や一般的な業界動向を補足すること。
                 """
                 # --------------------
-                try:
+               try:
                     ai_response = model.generate_content(prompt).text
-                except:
-                    ai_response = "AI分析中にエラーが発生しました。"
+                except Exception as e:
+                    ai_response = f"AIエラー詳細: {str(e)}"
 
                 # C. 履歴をFirestoreに保存
                 history_data = {
@@ -152,6 +152,7 @@ if "history_data" in st.session_state:
     doc.add_paragraph(data['ai_summary'])
     doc.save(bio := BytesIO())
     st.download_button("💾 Download Executive Report", bio.getvalue(), f"{data['target']}_Report.docx")
+
 
 
 
