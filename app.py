@@ -62,7 +62,7 @@ for h in recent_history:
 st.title("Intel-Scope: Personal AI Consultant")
 target_input = st.text_input("Target Entity", placeholder="企業名を入力...")
 
-# --- 4. メイン処理 ---
+# --- 4. メイン処理（修正版） ---
 if st.button("EXECUTE ANALYSIS"):
     if password != "crc2025":
         st.error("パスワードが正しくありません。")
@@ -71,6 +71,7 @@ if st.button("EXECUTE ANALYSIS"):
     elif remaining <= 0:
         st.error("検索枠上限です。")
     else:
+        # 使用量の更新
         usage_ref.set({"count": current_usage + 1}, merge=True)
         remaining -= 1
         quota_placeholder.metric("Search Remaining", f"{remaining} / 100")
@@ -78,48 +79,64 @@ if st.button("EXECUTE ANALYSIS"):
         with st.spinner("Analyzing..."):
             news_results = []
             try:
+                # 検索クエリの実行
                 query = f'{target_input} 再生医療 ニュース 2025'
                 url = f"https://www.googleapis.com/customsearch/v1?key={GOOGLE_API_KEY}&cx={GOOGLE_CX}&q={query}"
-                data = requests.get(url).json()
+                response_search = requests.get(url, timeout=10)
+                data = response_search.json()
+                
                 if "items" in data:
                     for item in data["items"]:
-                        news_results.append({'title': item.get('title'), 'body': item.get('snippet'), 'url': item.get('link')})
+                        news_results.append({
+                            'title': item.get('title'), 
+                            'body': item.get('snippet'), 
+                            'url': item.get('link')
+                        })
+                else:
+                    st.warning("検索結果が見つかりませんでした。")
             except Exception as e:
                 st.error(f"Search Error: {e}")
 
             if news_results:
                 context = "\n".join([f"Title: {n['title']}\nSnippet: {n['body']}" for n in news_results[:5]])
-                prompt_text = f"再生医療専門家として、{target_input}の動向を3点要約してください。\n\n{context}"
+                prompt_text = f"再生医療専門家として、{target_input}の動向を3点要約してください。また、今後の展望についても一言添えてください。\n\n検索結果:\n{context}"
                 
                 try:
-                    # キーの前後にある目に見えないスペースを完全に排除
-                    current_key = st.secrets["GEMINI_API_KEY"].strip()
+                    # APIキーのクリーニング
+                    current_key = GEMINI_API_KEY.strip()
                     
-                    # 【重要】モデル名を gemini-1.5-flash に固定。v1beta を使用。
-                    api_url = f"https://generativelanguage.googleapis.com/v1beta/gemini-1.5-flash:generateContent?key={current_key}"
+                    # エンドポイントの構成（v1 を推奨、安定性が高い）
+                    api_url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={current_key}"
                     
+                    # リクエストボディの構成
                     payload = {
                         "contents": [{
                             "parts": [{"text": prompt_text}]
-                        }]
+                        }],
+                        "generationConfig": {
+                            "temperature": 0.7,
+                            "maxOutputTokens": 800,
+                        }
                     }
                     headers = {"Content-Type": "application/json"}
                     
-                    # バックアップ（gemini-proなど）は一切呼ばず、これ一本で勝負します
-                    response = requests.post(api_url, json=payload, headers=headers, timeout=15)
+                    # API呼び出し
+                    response_ai = requests.post(api_url, json=payload, headers=headers, timeout=20)
+                    res_json = response_ai.json()
                     
-                    if response.status_code == 200:
-                        res_json = response.json()
-                        ai_response = res_json["candidates"][0]["content"]["parts"][0]["text"]
+                    if response_ai.status_code == 200:
+                        # 正常系：レスポンスのパース
+                        if "candidates" in res_json and len(res_json["candidates"]) > 0:
+                            ai_response = res_json["candidates"][0]["content"]["parts"][0]["text"]
+                        else:
+                            ai_response = "AIからの回答が空でした。プロンプトの内容を確認してください。"
                     else:
-                        # 404や400が出た場合、その生の理由を表示（デバッグ用）
-                        ai_response = f"AIエラー（ステータス {response.status_code}）: {response.text}"
+                        # 異常系：詳細なエラー表示
+                        error_msg = res_json.get("error", {}).get("message", "Unknown error")
+                        ai_response = f"AIエラー（{response_ai.status_code}）: {error_msg}"
                         
                 except Exception as ai_err:
-                    ai_response = f"通信エラー: {str(ai_err)}"
-                        
-                except Exception as ai_err:
-                    ai_response = f"通信エラー: {str(ai_err)}"
+                    ai_response = f"通信エラーが発生しました: {str(ai_err)}"
 
                 # --- 履歴保存とセッション更新 ---
                 history_data = {
@@ -130,8 +147,7 @@ if st.button("EXECUTE ANALYSIS"):
                 }
                 history_ref.add(history_data)
                 st.session_state.history_data = history_data
-            else:
-                st.warning("最新のニュースが見つかりませんでした。")
+                st.rerun() # 画面を更新して結果を表示
 
 # --- 5. 表示 ---
 if "history_data" in st.session_state:
@@ -145,6 +161,7 @@ if "history_data" in st.session_state:
         with cols[idx % 2].expander(n['title']):
             st.write(n['body'])
             st.markdown(f"[全文]({n['url']})")
+
 
 
 
