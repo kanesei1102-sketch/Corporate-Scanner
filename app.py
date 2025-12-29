@@ -8,19 +8,21 @@ from google.oauth2 import service_account
 import json
 import google.generativeai as genai
 
-# --- 1. 初期設定 ---
+# --- 1. 初期設定 (修正版) ---
 try:
     GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
     GOOGLE_CX = st.secrets["GOOGLE_CX"]
     GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
     
+    # Firestore設定
     key_dict = json.loads(st.secrets["FIRESTORE_KEY"])
     creds = service_account.Credentials.from_service_account_info(key_dict)
     db = firestore.Client(credentials=creds, project=key_dict["project_id"])
     
-    genai.configure(api_key=GEMINI_API_KEY)
-    # これが最新ライブラリにおける正解の書き方です
+    # 【ここを修正】通信方式を 'rest' に固定して、404エラーを回避します
+    genai.configure(api_key=GEMINI_API_KEY, transport='rest')
     model = genai.GenerativeModel('gemini-1.5-flash')
+    
 except Exception as e:
     st.error(f"システム設定エラー: {e}")
     st.stop()
@@ -120,6 +122,7 @@ if "history_data" in st.session_state:
         with cols[idx % 2].expander(n['title']):
             st.write(n['body'])
             st.markdown(f"[全文]({n['url']})")
+
 
 
 
