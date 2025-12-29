@@ -93,28 +93,34 @@ if st.button("EXECUTE ANALYSIS"):
                 context = "\n".join([f"Title: {n['title']}\nSnippet: {n['body']}" for n in news_results[:5]])
                 prompt_text = f"再生医療専門家として、{target_input}の動向を3点要約してください。\n\n{context}"
                 
-                # --- AIライブラリを使わず、直接Google API(v1)を叩く方式 ---
+                # --- 直接Google API(v1)を叩く究極の安定版 ---
                 try:
-                    # 【ここを修正】 URLの .../v1/models/... を .../v1/... に変えます
-                    # models/gemini-1.5-flash ではなく gemini-1.5-flash とだけ伝えます
-                    api_url = f"https://generativelanguage.googleapis.com/v1/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+                    # モデル名を含んだ正規のURL構成に戻します
+                    # v1beta ではなく v1 を使い、models/ を明示します
+                    api_url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
                     
                     payload = {
                         "contents": [{
                             "parts": [{"text": prompt_text}]
                         }]
                     }
-                    response = requests.post(api_url, json=payload)
+                    
+                    # タイムアウトを設定して、応答がない場合に備えます
+                    response = requests.post(api_url, json=payload, timeout=10)
+                    
+                    # ここでエラーがあれば即座に例外を発生させます
+                    response.raise_for_status() 
+                    
                     res_json = response.json()
                     
-                    # AIの回答を抽出
                     if "candidates" in res_json:
                         ai_response = res_json["candidates"][0]["content"]["parts"][0]["text"]
                     else:
-                        ai_response = f"AI応答エラー: {res_json.get('error', {}).get('message', '不明なエラー')}"
+                        ai_response = "AIは結果を出しましたが、要約形式ではありませんでした。"
+                        
                 except Exception as ai_err:
-                    ai_response = f"通信エラー詳細: {str(ai_err)}"
-                # --------------------------------------------------------
+                    # 詳細なエラーを出して、原因を特定します
+                    ai_response = f"AI通信エラー詳細: {str(ai_err)}"
 
                 history_data = {
                     "target": target_input,
@@ -139,6 +145,7 @@ if "history_data" in st.session_state:
         with cols[idx % 2].expander(n['title']):
             st.write(n['body'])
             st.markdown(f"[全文]({n['url']})")
+
 
 
 
