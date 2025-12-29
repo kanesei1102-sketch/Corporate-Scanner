@@ -96,7 +96,7 @@ if st.button("EXECUTE ANALYSIS"):
                     current_key = st.secrets["GEMINI_API_KEY"].strip()
                     
                     # 【重要】モデル名を gemini-1.5-flash に固定。v1beta を使用。
-                    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={current_key}"
+                    api_url = f"https://generativelanguage.googleapis.com/v1beta/gemini-1.5-flash:generateContent?key={current_key}"
                     
                     payload = {
                         "contents": [{
@@ -145,6 +145,7 @@ if "history_data" in st.session_state:
         with cols[idx % 2].expander(n['title']):
             st.write(n['body'])
             st.markdown(f"[全文]({n['url']})")
+
 
 
 
