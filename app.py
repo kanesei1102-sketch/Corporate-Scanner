@@ -1,36 +1,28 @@
 import streamlit as st
-import google.generativeai as genai
 import requests
-import json
 from datetime import datetime
 from google.cloud import firestore
 from google.oauth2 import service_account
+import json
 
-# ==========================================
-# 1. 接続・認証設定（Secretsから完全自動取得）
-# ==========================================
+# --- 1. 初期設定 ---
 try:
-    # 1.5 Flash 専用APIキーの設定
-    GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"].strip()
-    genai.configure(api_key=GEMINI_API_KEY)
-    
-    # Google検索用設定
     GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
     GOOGLE_CX = st.secrets["GOOGLE_CX"]
     
-    # Firestore設定（JSON文字列をパース）
+    # Firestore設定
     key_dict = json.loads(st.secrets["FIRESTORE_KEY"])
     creds = service_account.Credentials.from_service_account_info(key_dict)
     db = firestore.Client(credentials=creds, project=key_dict["project_id"])
 except Exception as e:
-    st.error(f"【設定エラー】Secretsの読み込みに失敗しました。設定内容（キー名やJSON形式）を再確認してください。: {e}")
+    st.error(f"システム設定エラー: {e}")
     st.stop()
 
-# ==========================================
-# 2. クォータ（利用枠）の管理
-# ==========================================
+# --- 2. データベース取得 ---
 today_str = datetime.now().strftime('%Y-%m-%d')
 usage_ref = db.collection("daily_usage").document(today_str)
+history_ref = db.collection("search_history")
+
 try:
     usage_doc = usage_ref.get()
     current_usage = usage_doc.to_dict().get("count", 0) if usage_doc.exists else 0
@@ -38,76 +30,96 @@ except:
     current_usage = 0
 remaining = 100 - current_usage
 
-# ==========================================
-# 3. 画面レイアウト
-# ==========================================
-st.set_page_config(page_title="Intel-Scope 1.5 Flash", layout="wide")
-st.title("🛡️ Intel-Scope: Gemini 1.5 Flash Engine")
-st.sidebar.metric("本日の残り検索枠", f"{remaining} / 100")
+try:
+    # 履歴を最大10件取得
+    history_docs = history_ref.order_by("timestamp", direction=firestore.Query.DESCENDING).limit(10).stream()
+    recent_history = [d.to_dict() for d in history_docs]
+except:
+    recent_history = []
 
-target_input = st.text_input("分析対象を入力してください（企業名・技術名など）")
+# --- 3. レイアウト ---
+st.set_page_config(page_title="Intel-Scope Personal", layout="wide")
 
-# ==========================================
-# 4. 解析メインロジック（SDK版・最新仕様）
-# ==========================================
-if st.button("EXECUTE ANALYSIS"):
-    if not target_input:
-        st.warning("対象を入力してください。")
+# サイドバー
+st.sidebar.title("🔐 Auth & Quota")
+password = st.sidebar.text_input("Passcode", type="password")
+quota_placeholder = st.sidebar.empty()
+quota_placeholder.metric("Search Remaining", f"{remaining} / 100")
+
+st.sidebar.divider()
+st.sidebar.title("📜 Recent History")
+for h in recent_history:
+    # タイムスタンプをキーにしてボタンを作成
+    t_str = h['timestamp'].strftime('%Y%m%d%H%M%S') if hasattr(h['timestamp'], 'strftime') else str(h['timestamp'])
+    if st.sidebar.button(f"🕒 {h['target']}", key=f"btn_{t_str}"):
+        st.session_state.history_data = h
+
+# メイン画面
+st.title("Intel-Scope: Personal News Scanner")
+st.markdown("再生医療・バイオテック企業の最新動向をリアルタイムでスキャンし、履歴に保存します。")
+target_input = st.text_input("Target Entity", placeholder="企業名を入力...")
+
+# --- 4. メイン処理 (検索と保存のみ) ---
+if st.button("EXECUTE SCAN"):
+    if password != "crc2025":
+        st.error("パスワードが正しくありません。")
+    elif not target_input:
+        st.warning("社名を入力してください。")
     elif remaining <= 0:
-        st.error("本日の解析上限に達しました。")
+        st.error("本日の検索枠上限です。")
     else:
-        with st.spinner(f"「{target_input}」の最新情報を検索し、1.5 Flashが解析中..."):
-            
-            # --- A. 最新ニュースの収集 ---
-            news_context = ""
-            news_list = []
+        # 使用量カウントアップ
+        usage_ref.set({"count": current_usage + 1}, merge=True)
+        remaining -= 1
+        quota_placeholder.metric("Search Remaining", f"{remaining} / 100")
+        
+        with st.spinner("Scanning latest news..."):
+            news_results = []
             try:
-                search_url = f"https://www.googleapis.com/customsearch/v1?key={GOOGLE_API_KEY}&cx={GOOGLE_CX}&q={target_input} 2025"
-                res = requests.get(search_url, timeout=10).json()
-                if "items" in res:
-                    for item in res["items"][:5]:
-                        news_list.append({'title': item['title'], 'link': item['link']})
-                        news_context += f"【{item['title']}】\n{item['snippet']}\n\n"
+                # 検索クエリを最適化
+                query = f'{target_input} 再生医療 ニュース 2025'
+                url = f"https://www.googleapis.com/customsearch/v1?key={GOOGLE_API_KEY}&cx={GOOGLE_CX}&q={query}"
+                data = requests.get(url).json()
+                
+                if "items" in data:
+                    for item in data["items"]:
+                        news_results.append({
+                            'title': item.get('title'),
+                            'body': item.get('snippet'),
+                            'url': item.get('link')
+                        })
             except Exception as e:
-                st.error(f"検索エラー: {e}")
+                st.error(f"Search Error: {e}")
 
-            # --- B. Gemini 1.5 Flash 解析 ---
-            if news_context:
-                try:
-                    # モデルを厳密に指名。SDKが正しいエンドポイントへ接続します。
-                    model = genai.GenerativeModel('gemini-1.5-flash')
-                    
-                    # 生成実行（お支払い情報が紐付いていれば、404や429は起きません）
-                    response = model.generate_content(
-                        f"あなたは再生医療の専門コンサルタントです。以下の最新情報を3つの重要ポイントで要約してください。\n最後に、今後の展望を1文で添えてください。\n\n{news_context}"
-                    )
-                    
-                    # 結果の表示
-                    st.divider()
-                    st.subheader(f"📊 分析結果: {target_input}")
-                    st.info(response.text)
-                    
-                    # ニュースソースの表示
-                    with st.expander("参照したニュースソース（上位5件）"):
-                        for n in news_list:
-                            st.markdown(f"- [{n['title']}]({n['link']})")
-
-                    # 履歴の保存
-                    db.collection("search_history").add({
-                        "target": target_input,
-                        "ai_summary": response.text,
-                        "timestamp": datetime.now()
-                    })
-                    usage_ref.set({"count": current_usage + 1}, merge=True)
-                    st.sidebar.success("解析成功・履歴を保存しました")
-                    
-                except Exception as ai_err:
-                    # 詳細なエラーを出力して原因を突き止めやすくします
-                    st.error(f"AI解析エラー: {ai_err}")
-                    if "404" in str(ai_err):
-                        st.warning("Google Cloudコンソールで 'Generative Language API' が有効になっているか確認してください。")
+            if news_results:
+                # 履歴データを作成（AI要約の代わりに検索サマリーを保存）
+                history_data = {
+                    "target": target_input,
+                    "ai_summary": f"{target_input} に関する最新ニュースを {len(news_results)} 件取得しました。",
+                    "news": news_results[:5],
+                    "timestamp": datetime.now()
+                }
+                # Firestoreへ保存
+                history_ref.add(history_data)
+                # 現在の表示用セッションを更新
+                st.session_state.history_data = history_data
+                st.success(f"{target_input} のスキャンが完了し、履歴に保存しました！")
             else:
-                st.warning("有効なニュース情報が見つかりませんでした。")
+                st.warning("最新のニュースが見つかりませんでした。")
+
+# --- 5. 表示エリア ---
+if "history_data" in st.session_state:
+    d = st.session_state.history_data
+    st.divider()
+    st.subheader(f"📁 Scan Result: {d['target']}")
+    
+    # ニュースを2列のカード形式で表示
+    cols = st.columns(2)
+    for idx, n in enumerate(d['news']):
+        with cols[idx % 2].expander(f"📌 {n['title']}", expanded=True):
+            st.write(n['body'])
+            st.markdown(f"[記事全文を読む]({n['url']})")
+
 
 
 
