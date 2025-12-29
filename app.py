@@ -22,45 +22,37 @@ MASTER_RECORDS = {
 def get_final_official_site(query):
     try:
         with DDGS() as ddgs:
-            # 日本語・英語の両方で「公式サイト」を確実に狙う
-            # 「株式会社」と「Corporate」を混ぜるのがコツ
-            search_query = f"{query} 株式会社 公式 corporate site"
-            results = list(ddgs.text(search_query, max_results=15))
+            # 検索ワードに業界のキーワードを混ぜることで、同名の他業種を排除
+            # 例：「シンクラボラトリー 再生医療 細胞治療 公式」
+            search_query = f"{query} 再生医療 細胞治療 CPC CDMO 公式"
+            results = list(ddgs.text(search_query, max_results=10))
             
             if not results: return None
             
-            # 絶対に公式サイトではないドメイン（ここを厳選）
+            # 業界調査に不要なサイトを排除
             noise_list = [
                 "wikipedia.org", "facebook.com", "youtube.com", "twitter.com", 
-                "indeed", "mynavi", "doda.jp", "tabelog.com", ".cn", ".ru"
+                "indeed", "mynavi", "tabelog.com", "retty.me", "hotpepper"
             ]
             
-            candidates = []
             for r in results:
                 url = r['href'].lower()
                 title = r['title']
                 
-                # ゴミサイトは除外
                 if any(noise in url for noise in noise_list):
                     continue
                 
+                # スコアリング：業界用語が含まれていれば大幅加点
                 score = 0
-                # 判定ロジックを「正規ルート」に特化
-                if "toyota.jp" in url or "toyota.com" in url: score += 10 # トヨタ特例
-                if ".co.jp" in url or ".jp" in url: score += 5
-                if "corporate" in url or "global" in url or "company" in url: score += 3
-                if "株式会社" in title or "公式" in title or "Official" in title: score += 4
+                if any(k in title for k in ["再生医療", "細胞", "治療", "バイオ", "製薬", "Medical", "Cell", "Therapy"]):
+                    score += 10
+                if ".co.jp" in url or ".jp" in url:
+                    score += 5
                 
-                candidates.append({"url": r['href'], "score": score})
+                if score > 5: # 業界関連性が高いと判断
+                    return r['href']
 
-            # スコア順に並び替え
-            if candidates:
-                best = sorted(candidates, key=lambda x: x['score'], reverse=True)[0]
-                # ある程度スコアがあればそれを採用
-                if best['score'] > 0:
-                    return best['url']
-            
-            # スコアが付かなくても、1位がノイズでなければそれを出す（最後の手段）
+            # 専門サイトが見つからなくても、1位がノイズでなければ出す
             if not any(noise in results[0]['href'].lower() for noise in noise_list):
                 return results[0]['href']
                 
@@ -157,6 +149,7 @@ if st.button("EXECUTE"):
                         with st.expander(f"{item['title']}", expanded=True):
                             st.write(item['body'])
                             st.markdown(f"[Source Article]({item['url']})")
+
 
 
 
