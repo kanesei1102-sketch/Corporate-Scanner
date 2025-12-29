@@ -19,7 +19,7 @@ try:
     db = firestore.Client(credentials=creds, project=key_dict["project_id"])
     
     genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('models/gemini-1.5-flash')
 except Exception as e:
     st.error(f"システム設定エラー: {e}")
     st.stop()
@@ -117,6 +117,7 @@ if "history_data" in st.session_state:
         with cols[idx % 2].expander(n['title']):
             st.write(n['body'])
             st.markdown(f"[全文]({n['url']})")
+
 
 
 
