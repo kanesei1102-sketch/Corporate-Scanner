@@ -58,12 +58,27 @@ st.sidebar.title("📜 Recent History")
 
 st.title("Intel-Scope: Personal AI Consultant")
 target_input = st.text_input("Target Entity", placeholder="企業名を入力...")
-# --- 3. レイアウト (サイドバー 51行目付近) ---
+# --- 3. レイアウト ---
+st.set_page_config(page_title="Intel-Scope Personal", layout="wide")
+
+# サイドバーの中身を全部ここで書き切る
+st.sidebar.title("🔐 Auth & Quota")
+password = st.sidebar.text_input("Passcode", type="password")
+quota_placeholder = st.sidebar.empty()
+quota_placeholder.metric("Search Remaining", f"{remaining} / 100")
+
+st.sidebar.divider()
+st.sidebar.title("📜 Recent History")
+
+# 履歴ボタンのループをここに持ってくる
 for h in recent_history:
-    # タイムスタンプをより確実に文字列キーへ変換
     t_str = h['timestamp'].strftime('%Y%m%d%H%M%S') if hasattr(h['timestamp'], 'strftime') else str(h['timestamp'])
     if st.sidebar.button(f"🕒 {h['target']}", key=f"btn_{t_str}"):
         st.session_state.history_data = h
+
+# メイン画面の中身はここから
+st.title("Intel-Scope: Personal AI Consultant")
+target_input = st.text_input("Target Entity", placeholder="企業名を入力...")
 # --- 4. メイン処理 ---
 if st.button("EXECUTE ANALYSIS"):
     if password != "crc2025":
@@ -139,6 +154,7 @@ if "history_data" in st.session_state:
         with cols[idx % 2].expander(n['title']):
             st.write(n['body'])
             st.markdown(f"[全文]({n['url']})")
+
 
 
 
