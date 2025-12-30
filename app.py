@@ -5,7 +5,9 @@ from google.cloud import firestore
 from google.oauth2 import service_account
 import json
 
-# --- 1. 初期設定 ---
+# --- 1. システム初期設定 ---
+st.set_page_config(page_title="Intel-Scope Personal", layout="wide")
+
 try:
     GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
     GOOGLE_CX = st.secrets["GOOGLE_CX"]
@@ -31,30 +33,25 @@ except:
     current_usage = 0
 remaining = 100 - current_usage
 
-# 履歴を最大10件取得（日付の新しい順）
+# 履歴を最大10件取得
 try:
     history_docs = history_ref.order_by("timestamp", direction=firestore.Query.DESCENDING).limit(10).stream()
     recent_history = [d.to_dict() for d in history_docs]
 except:
     recent_history = []
 
-# --- 3. レイアウト ---
-st.set_page_config(page_title="Intel-Scope Personal", layout="wide")
-
-# サイドバー設定
-st.sidebar.title("🔐 Auth & Quota")
-password = st.sidebar.text_input("Passcode", type="password")
-quota_placeholder = st.sidebar.empty()
-quota_placeholder.metric("Search Remaining", f"{remaining} / 100")
+# --- 3. レイアウト設定 ---
+# サイドバー
+st.sidebar.title("📊 Quota")
+st.sidebar.metric("Search Remaining", f"{remaining} / 100")
 
 st.sidebar.divider()
 st.sidebar.title("📜 Search History")
 
-# サイドバーに履歴ボタンを表示（西暦・日付付き）
+# 履歴ボタンの生成
 for h in recent_history:
     if 'timestamp' in h:
         ts = h['timestamp']
-        # 西暦・月・日・時・分を表示
         date_str = ts.strftime('%Y/%m/%d %H:%M')
         t_key = ts.strftime('%Y%m%d%H%M%S%f')
     else:
@@ -66,14 +63,12 @@ for h in recent_history:
 
 # メイン画面
 st.title("Intel-Scope: Personal News Scanner")
-st.markdown("再生医療・バイオテック企業の最新動向をリアルタイムでスキャンし、履歴に保存します。")
+st.markdown("再生医療・バイオテック企業の最新動向をリアルタイムでスキャンします。")
 target_input = st.text_input("Target Entity", placeholder="企業名を入力...")
 
-# --- 4. メイン処理 (検索と保存) ---
-if st.button("EXECUTE SCAN"):
-    if password != "crc2025":
-        st.error("パスワードが正しくありません。")
-    elif not target_input:
+# --- 4. スキャン実行処理 ---
+if st.button("EXECUTE SCAN", type="primary"):
+    if not target_input:
         st.warning("社名を入力してください。")
     elif remaining <= 0:
         st.error("本日の検索枠上限です。")
@@ -81,11 +76,11 @@ if st.button("EXECUTE SCAN"):
         # 使用量カウントアップ
         usage_ref.set({"count": current_usage + 1}, merge=True)
         remaining -= 1
-        quota_placeholder.metric("Search Remaining", f"{remaining} / 100")
         
         with st.spinner(f"Scanning latest news for {target_input}..."):
             news_results = []
             try:
+                # 2025年の最新情報を狙い撃ち
                 query = f'{target_input} 再生医療 ニュース 2025'
                 url = f"https://www.googleapis.com/customsearch/v1?key={GOOGLE_API_KEY}&cx={GOOGLE_CX}&q={query}"
                 data = requests.get(url).json()
@@ -101,28 +96,26 @@ if st.button("EXECUTE SCAN"):
                 st.error(f"Search Error: {e}")
 
             if news_results:
-                # 履歴データを作成（全ての括弧を正しく閉じました）
                 history_data = {
                     "target": target_input,
                     "ai_summary": f"{target_input} に関する最新ニュースを {len(news_results)} 件取得しました。",
                     "news": news_results[:6],
                     "timestamp": datetime.now()
                 }
-                # Firestoreへ保存
+                # Firestore保存 & セッション更新
                 history_ref.add(history_data)
-                # 表示用セッションを更新
                 st.session_state.history_data = history_data
                 st.success("スキャン完了！履歴に保存しました。")
+                st.rerun() # 履歴を即座にサイドバーに反映させるため
             else:
                 st.warning("最新のニュースが見つかりませんでした。")
 
-# --- 5. 表示エリア ---
+# --- 5. 結果表示エリア ---
 if "history_data" in st.session_state:
     d = st.session_state.history_data
     st.divider()
     
     ts_display = d['timestamp']
-    # メイン画面にも西暦を表示
     date_display = ts_display.strftime('%Y年%m月%d日 %H:%M') if hasattr(ts_display, 'strftime') else str(ts_display)
         
     st.subheader(f"📁 {d['target']}（{date_display} の結果）")
@@ -132,6 +125,7 @@ if "history_data" in st.session_state:
         with cols[idx % 2].expander(f"📌 {n['title']}", expanded=True):
             st.write(n['body'])
             st.markdown(f"[記事全文を読む]({n['url']})")
+
 
 
 
